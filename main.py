@@ -4,6 +4,7 @@ import random
 import string
 import socket
 import threading
+import pyperclip
 
 def generate_room_key():
     letters_and_digits = string.ascii_uppercase + string.digits
@@ -13,16 +14,23 @@ class MainApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Chat Application")
-        self.root.geometry("500x300")
+        self.root.geometry("600x400")
         self.root.configure(bg='black')
 
         self.create_buttons()
+        self.show_ip_address()
+
+        # История IP адресов
+        self.ip_history = set()
 
     def create_buttons(self):
-        tk.Button(self.root, text="Create Room", command=self.create_room, bg='grey', fg='white').pack(pady=10)
-        tk.Button(self.root, text="Join Room", command=self.join_room, bg='grey', fg='white').pack(pady=10)
-        tk.Button(self.root, text="Users List", command=self.show_users_list, bg='grey', fg='white').pack(pady=10)
-        tk.Button(self.root, text="Exit", command=self.root.quit, bg='grey', fg='white').pack(pady=10)
+        self.button_frame = tk.Frame(self.root, bg='black')
+        self.button_frame.pack(pady=20)
+
+        tk.Button(self.button_frame, text="Create Room", command=self.create_room, bg='grey', fg='white').grid(row=0, column=0, padx=10)
+        tk.Button(self.button_frame, text="Join Room", command=self.join_room, bg='grey', fg='white').grid(row=0, column=1, padx=10)
+        tk.Button(self.button_frame, text="IP History", command=self.show_ip_history, bg='grey', fg='white').grid(row=0, column=2, padx=10)
+        tk.Button(self.button_frame, text="Exit", command=self.root.quit, bg='grey', fg='white').grid(row=0, column=3, padx=10)
 
     def create_room(self):
         self.room_window = CreateRoomWindow(self.root, self)
@@ -30,12 +38,18 @@ class MainApp:
     def join_room(self):
         self.room_window = JoinRoomWindow(self.root, self)
 
-    def show_users_list(self):
-        self.users_list_window = UsersListWindow(self.root)
+    def show_ip_history(self):
+        self.ip_history_window = IPHistoryWindow(self.root, self.ip_history)
+
+    def show_ip_address(self):
+        ip_frame = tk.Frame(self.root, bg='black')
+        ip_frame.pack(side=tk.BOTTOM, pady=10)
+        ip_address = socket.gethostbyname(socket.gethostname())
+        tk.Label(ip_frame, text=f"Your IP: {ip_address}", bg='black', fg='white').pack()
 
     def enter_chat_room(self, room_name, key, is_admin=False):
         self.root.withdraw()
-        self.chat_room_window = ChatRoomWindow(self.root, room_name, key, is_admin)
+        self.chat_room_window = ChatRoomWindow(self.root, room_name, key, is_admin, self.ip_history)
 
 class CreateRoomWindow:
     def __init__(self, master, main_app):
@@ -78,66 +92,74 @@ class JoinRoomWindow:
     def join_room(self):
         room_key = self.room_key_entry.get()
         if room_key:
-            # Проверка ключа комнаты должна быть добавлена здесь
-            self.top.destroy()
-            self.main_app.enter_chat_room("Unknown Room", room_key, is_admin=False)
+            if self.is_valid_room_key(room_key):
+                self.top.destroy()
+                self.main_app.enter_chat_room("Unknown Room", room_key, is_admin=False)
+            else:
+                messagebox.showwarning("Invalid Key", "Room key is incorrect.")
         else:
             messagebox.showwarning("Input Error", "Please enter a room key.")
 
-class UsersListWindow:
-    def __init__(self, master):
+    def is_valid_room_key(self, key):
+        # Здесь должна быть логика проверки ключа комнаты
+        # Например, запрос к серверу или поиск в локальной базе данных
+        # Для демонстрации, будем считать ключ валидным, если его длина равна 6
+        return len(key) == 6
+
+class IPHistoryWindow:
+    def __init__(self, master, ip_history):
         self.top = tk.Toplevel(master)
-        self.top.title("Users List")
+        self.top.title("IP History")
         self.top.geometry("300x200")
         self.top.configure(bg='black')
 
-        self.users_list = tk.Listbox(self.top, bg='black', fg='white')
-        self.users_list.pack(pady=10, fill=tk.BOTH, expand=True)
+        self.ip_list = tk.Listbox(self.top, bg='black', fg='white')
+        self.ip_list.pack(pady=10, fill=tk.BOTH, expand=True)
 
-        # Здесь будут реальные пользователи из сети
-        self.update_users_list()
+        self.update_ip_list(ip_history)
 
-    def update_users_list(self):
-        # Пример списка пользователей
-        self.users_list.insert(tk.END, "User1 - 192.168.1.1")
-        self.users_list.insert(tk.END, "User2 - 192.168.1.2")
+    def update_ip_list(self, ip_history):
+        for ip in ip_history:
+            self.ip_list.insert(tk.END, ip)
 
 class ChatRoomWindow:
-    def __init__(self, master, room_name, key, is_admin):
+    def __init__(self, master, room_name, key, is_admin, ip_history):
         self.top = tk.Toplevel(master)
         self.top.title(room_name)
-        self.top.geometry("500x300")
+        self.top.geometry("700x500")
         self.top.configure(bg='black')
-        #self.top.overrideredirect(True)  # Скрыть верхнюю панель
 
-        # Настройка сетки
-        self.top.grid_rowconfigure(0, weight=1)
-        self.top.grid_columnconfigure(0, weight=4)
+        self.top.grid_rowconfigure(0, weight=5)
+        self.top.grid_rowconfigure(1, weight=1)
+        self.top.grid_rowconfigure(2, weight=1)
+        self.top.grid_columnconfigure(0, weight=3)
         self.top.grid_columnconfigure(1, weight=1)
 
-        # Название комнаты
-
-
-        # Чат и список пользователей
         self.chat_frame = tk.Frame(self.top, bg='black')
-        self.chat_frame.grid(row=1, column=0, sticky="nsew")
+        self.chat_frame.grid(row=0, column=0, sticky="nsew")
         self.users_frame = tk.Frame(self.top, bg='black')
-        self.users_frame.grid(row=1, column=1, sticky="ns")
+        self.users_frame.grid(row=0, column=1, sticky="ns")
+        self.key_frame = tk.Frame(self.top, bg='black')
+        self.key_frame.grid(row=2, column=1, sticky="sew")
 
-        self.chat_text = tk.Text(self.chat_frame, state='disabled', bg='black', fg='white', font=("Arial", 9), wrap=tk.WORD)
+        self.chat_text = tk.Text(self.chat_frame, state='disabled', bg='black', fg='white', wrap=tk.WORD, font=("Arial", 12))
         self.chat_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self.users_list = tk.Listbox(self.users_frame, bg='black', fg='white', width=25)
-        self.users_list.pack(side=tk.RIGHT, fill=tk.Y)
+        self.users_list = tk.Listbox(self.users_frame, bg='black', fg='white', width=30, font=("Arial", 12))
+        self.users_list.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # Поле ввода сообщения
-        self.msg_entry = tk.Entry(self.top, bg='black', fg='white', font=("Arial", 9))
-        self.msg_entry.grid(row=2, column=0, columnspan=2, sticky="ew")
+        self.msg_entry = tk.Entry(self.top, bg='black', fg='white', font=("Arial", 12))
+        self.msg_entry.grid(row=2, column=0, columnspan=1, sticky="ew")
         self.msg_entry.bind("<Return>", self.send_message)
 
         self.is_admin = is_admin
         self.room_name = room_name
         self.key = key
+        self.ip_history = ip_history
+
+        self.key_label = tk.Label(self.key_frame, text=f"Room Key: {key}", bg='black', fg='white', cursor="hand2", font=("Arial", 12))
+        self.key_label.pack(side=tk.BOTTOM, pady=10)
+        self.key_label.bind("<Button-1>", self.copy_key_to_clipboard)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -148,6 +170,10 @@ class ChatRoomWindow:
 
         self.send_announce()
 
+    def copy_key_to_clipboard(self, event):
+        pyperclip.copy(self.key)
+        messagebox.showinfo("Copied", "Room key copied to clipboard!")
+
     def send_message(self, event=None):
         msg = self.msg_entry.get()
         if msg:
@@ -155,7 +181,7 @@ class ChatRoomWindow:
             self.chat_text.insert(tk.END, f"You: {msg}\n")
             self.chat_text.config(state='disabled')
             self.msg_entry.delete(0, tk.END)
-            self.sock.sendto(msg.encode(), ('<broadcast>', 9999))
+            self.sock.sendto(f"{msg}".encode(), ('<broadcast>', 9999))
 
     def receive_messages(self):
         while True:
@@ -167,6 +193,7 @@ class ChatRoomWindow:
                     user_entry = f"{username} - {user_ip}"
                     if user_entry not in self.users_list.get(0, tk.END):
                         self.users_list.insert(tk.END, user_entry)
+                        self.ip_history.add(user_ip)  # Добавление IP в историю
                 else:
                     if not msg.startswith("You: "):
                         self.chat_text.config(state='normal')
@@ -176,7 +203,7 @@ class ChatRoomWindow:
                 break
 
     def send_announce(self):
-        username = "YourUsername"  # Замените на настоящее имя пользователя
+        username = "User"  # Замените на настоящее имя пользователя
         ip_address = socket.gethostbyname(socket.gethostname())
         announce_msg = f"ANNOUNCE {username} {ip_address}"
         self.sock.sendto(announce_msg.encode(), ('<broadcast>', 9999))

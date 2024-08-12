@@ -1,6 +1,6 @@
 import socket
 import threading
-
+from utils import save_ip_address
 BUFFER_SIZE = 1024
 clients = {}
 addresses = {}
@@ -11,6 +11,7 @@ def receive_messages(server_socket, broadcast):
         try:
             client_socket, client_address = server_socket.accept()
             print(f"Accepted connection from {client_address}")  # Debugging
+            save_ip_address(client_address[0] + " - Client")
             addresses[client_socket] = client_address[0]
             threading.Thread(target=handle_client, args=(client_socket, broadcast), daemon=True).start()
         except Exception as e:

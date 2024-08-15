@@ -1,6 +1,6 @@
 import socket
 import threading
-from utils import save_nickname, load_nickname
+from utils import save_nickname, load_nickname, save_ip_address
 
 
 HOST = '0.0.0.0'
@@ -8,19 +8,7 @@ PORT = 36500
 nickname = ""
 
 
-def save_ip_address(ip_address, file_path='ips.txt'):
-    try:
-        # Читаем существующие IP-адреса из файла
-        with open(file_path, 'r') as file:
-            existing_ips = file.read().splitlines()
-    except FileNotFoundError:
-        # Если файла еще нет, считаем, что существующих IP-адресов нет
-        existing_ips = []
 
-    # Проверяем, есть ли уже такой IP-адрес в файле
-    if ip_address not in existing_ips:
-        with open(file_path, 'a') as file:
-            file.write(ip_address + '\n')
 
 
 def start_server(host, port, nickname):

@@ -37,10 +37,11 @@ def create_tray_icon():
     return icon
 
 # Функция для открытия окна чата
-def create_chat_window():
+def create_chat_window(room_name):
     # Создаем новое окно
     chat_window = tk.Toplevel()
-    chat_window.title("Chat Room")
+    chat_window.iconbitmap('Config\Radmin Chat.ico')
+    chat_window.title(f"{room_name} : server ip")  # Добавляем имя комнаты в заголовок окна
     chat_window.geometry("800x600")
     chat_window.configure(bg='black')
 
@@ -127,11 +128,6 @@ def update_user_list_width():
     user_list_frame_width = message_area.winfo_width() // 2
     user_list_frame.config(width=user_list_frame_width)
 
-# Функция для создания комнаты
-def create_room():
-    root.withdraw()  # Скрываем главное окно
-    create_chat_window()  # Создаем окно чата
-
 # Функция для подключения к комнате
 def join_room():
     messagebox.showinfo("Join Room", "Join Room function called.")
@@ -139,6 +135,87 @@ def join_room():
 # Функция для отображения списка IP
 def ip_list():
     messagebox.showinfo("IP List", "IP List function called.")
+
+# Функция для отображения настроек комнаты
+def show_room_settings():
+    # Создаем новое окно настроек
+    settings_window = tk.Toplevel(root)
+    settings_window.title("Room Settings")
+    settings_window.iconbitmap('Config\Radmin Chat.ico')
+    settings_window.configure(bg='black')
+    settings_window.geometry("300x200")  # Начальный размер окна
+    settings_window.resizable(False, False)  # Блокируем изменение размера окна
+
+    # Переменные для хранения состояния
+    global password_var, password_entry_var, password_entry
+    password_var = tk.IntVar()
+    password_entry_var = tk.StringVar()
+    password_entry = None  # Инициализируем password_entry как None
+
+    # Создаем фрейм для размещения элементов
+    frame = tk.Frame(settings_window, bg='black')
+    frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+
+    # Метка и поле для ввода имени комнаты
+    tk.Label(frame, text="Room Name", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
+    room_name_var = tk.StringVar()
+    room_name_entry = tk.Entry(frame, textvariable=room_name_var, bg='#333', fg='white', font=('Helvetica', 12))
+    room_name_entry.grid(row=0, column=1, sticky='ew', pady=5)
+
+    # Чекбокс для включения пароля
+    password_var = tk.IntVar()
+    password_checkbox = tk.Checkbutton(frame, text="Password", variable=password_var, fg='white', bg='black', font=('Helvetica', 12), command=lambda: toggle_password_field(settings_window))
+    password_checkbox.grid(row=1, column=0, columnspan=2, sticky='w', pady=5)
+
+    # Поле для ввода пароля
+    password_entry = tk.Entry(frame, textvariable=password_entry_var, show="*", bg='#333', fg='white', font=('Helvetica', 12))
+    password_entry.grid(row=2, column=0, columnspan=2, sticky='ew', pady=5)
+
+    # Кнопка для подтверждения настроек и создания комнаты
+    create_button = tk.Button(frame, text="Create Room", command=lambda: create_room_with_settings(settings_window, room_name_var, password_entry_var), bg='#333', fg='white', font=('Helvetica', 12))
+    create_button.grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
+
+    # Привязываем событие нажатия Enter к функции создания комнаты
+    settings_window.bind('<Return>', lambda event: create_room_with_settings(settings_window, room_name_var, password_entry_var))
+
+    # Изначально проверяем состояние чекбокса для отображения поля пароля
+    toggle_password_field(settings_window)
+
+def toggle_password_field(settings_window):
+    # Включаем или скрываем поле для ввода пароля в зависимости от состояния чекбокса
+    if password_var.get() == 1:
+        password_entry.grid(row=2, column=0, columnspan=2, sticky='ew', pady=5)  # Показываем поле для ввода пароля
+    else:
+        password_entry.grid_forget()  # Скрываем поле для ввода пароля
+    settings_window.update_idletasks()  # Обновляем размер окна
+
+# Функция для создания комнаты с настройками
+def create_room_with_settings(settings_window, room_name_var, password_entry_var):
+    room_name = room_name_var.get().strip()
+    password = password_entry_var.get().strip()
+
+    if not room_name:
+        settings_window.lift()  # Поднимаем окно настроек поверх всех
+        messagebox.showerror("Error", "Please enter a Room Name.")
+        return
+
+    if password_var.get() == 1 and not password:
+        settings_window.lift()  # Поднимаем окно настроек поверх всех
+        messagebox.showerror("Error", "Password checkbox is checked, but no password entered.")
+        return
+
+    # Закрываем окно настроек после успешного создания комнаты
+    settings_window.destroy()
+
+    # Закрываем главное окно после создания комнаты
+    root.withdraw()  # Скрываем главное окно
+
+    # Создаем чат окно
+    create_chat_window(room_name)
+
+# Изменяем функцию создания комнаты
+def create_room():
+    show_room_settings()  # Показать окно настроек комнаты
 
 # Создаем главное окно
 root = tk.Tk()

@@ -5,252 +5,213 @@ from pystray import MenuItem as item
 import threading
 from utils import create_custom_icon
 
-# Глобальная переменная для иконки
-tray_icon = None
+class ChatApplication:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Radmin Chat")
+        self.root.geometry("700x500")
+        self.root.configure(bg='black')
 
-# Функция для выхода из программы
-def quit_window(icon, item):
-    icon.stop()
-    root.quit()  # Завершаем основной цикл Tkinter
-    root.destroy()  # Закрываем главное окно
+        # Установка иконки приложения
+        self.icon_image = create_custom_icon()
+        self.icon_image.save('app_icon.ico')
+        self.root.iconbitmap('app_icon.ico')
 
-# Функция для сворачивания окна в трей
-def hide_window():
-    global tray_icon
-    root.withdraw()  # Скрыть главное окно
-    tray_icon = create_tray_icon()  # Создать иконку в трее
+        self.tray_icon = None
 
-# Функция для отображения окна из трея
-def show_window(icon, item):
-    global tray_icon
-    if tray_icon is not None:
-        tray_icon.stop()  # Остановить иконку в трее
-        tray_icon = None  # Сбрасываем значение
-    root.deiconify()  # Показать главное окно
+        # Создание фрейма с кнопками
+        self.create_buttons_frame()
 
-# Функция для создания иконки трея
-def create_tray_icon():
-    icon_image = create_custom_icon()
-    menu = (item('Show', show_window), item('Quit', quit_window))
-    icon = pystray.Icon("test", icon_image, "Radmin Chat", menu)
-    threading.Thread(target=icon.run, daemon=True).start()
-    return icon
+        # Перехват закрытия окна
+        self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
 
-# Функция для открытия окна чата
-def create_chat_window(room_name):
-    # Создаем новое окно
-    chat_window = tk.Toplevel()
-    chat_window.iconbitmap('Config\Radmin Chat.ico')
-    chat_window.title(f"{room_name} : server ip")  # Добавляем имя комнаты в заголовок окна
-    chat_window.geometry("800x600")
-    chat_window.configure(bg='black')
+    def create_buttons_frame(self):
+        button_frame = tk.Frame(self.root, bg='black')
+        button_frame.pack(pady=50, fill=tk.X)
 
-    # Создаем фрейм для истории сообщений
-    history_frame = tk.Frame(chat_window, bg='black')
-    history_frame.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
+        button_style = {
+            'font': ('Helvetica', 16),
+            'bg': '#333',
+            'fg': 'white',
+            'activebackground': '#555',
+            'activeforeground': 'white',
+            'bd': 0,
+            'relief': tk.FLAT,
+            'width': 15,
+            'height': 2
+        }
 
-    # Создаем виджет ScrolledText для истории сообщений
-    global message_area
-    message_area = scrolledtext.ScrolledText(history_frame, wrap=tk.WORD, bg='black', fg='white', font=('Helvetica', 12), state=tk.DISABLED)
-    message_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tk.Button(button_frame, text="Create Room", command=self.create_room, **button_style).pack(pady=10)
+        tk.Button(button_frame, text="Join Room", command=self.join_room, **button_style).pack(pady=10)
+        tk.Button(button_frame, text="IP List", command=self.ip_list, **button_style).pack(pady=10)
 
-    # Создаем фрейм для списка участников
-    global user_list_frame
-    user_list_frame = tk.Frame(chat_window, bg='black')
-    user_list_frame.grid(row=0, column=1, sticky='ns', padx=5, pady=5)
+    def quit_window(self, icon, item):
+        icon.stop()
+        self.root.quit()
+        self.root.destroy()
 
-    # Создаем виджет Listbox для списка участников
-    global user_list
-    user_list = tk.Listbox(user_list_frame, bg='black', fg='white', font=('Helvetica', 12))
-    user_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    def hide_window(self):
+        self.root.withdraw()
+        self.tray_icon = self.create_tray_icon()
 
-    # Создаем фрейм для ввода сообщений
-    input_frame = tk.Frame(chat_window, bg='black')
-    input_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=5, pady=5)
+    def show_window(self, icon, item):
+        if self.tray_icon is not None:
+            self.tray_icon.stop()
+            self.tray_icon = None
+        self.root.deiconify()
 
-    # Создаем виджет Text для ввода сообщений
-    global message_entry
-    message_entry = tk.Text(input_frame, bg='#333', fg='white', font=('Helvetica', 12), height=3)
-    message_entry.grid(row=0, column=0, sticky='ew')
-    message_entry.bind('<Return>', send_message)
-    message_entry.bind('<Shift-Return>', insert_newline)
+    def create_tray_icon(self):
+        icon_image = create_custom_icon()
+        menu = (item('Show', self.show_window), item('Quit', self.quit_window))
+        icon = pystray.Icon("test", icon_image, "Radmin Chat", menu)
+        threading.Thread(target=icon.run, daemon=True).start()
+        return icon
 
-    # Настраиваем ограничение на высоту
-    message_entry.bind('<KeyRelease>', adjust_text_height)
+    def create_chat_window(self, room_name):
+        chat_window = tk.Toplevel()
+        chat_window.iconbitmap('Config\Radmin Chat.ico')
+        chat_window.title(f"{room_name} : server ip")
+        chat_window.geometry("800x600")
+        chat_window.configure(bg='black')
 
-    # Обновляем размеры при изменении окна
-    chat_window.bind('<Configure>', on_resize)
+        # Создаем фрейм для истории сообщений
+        history_frame = tk.Frame(chat_window, bg='black')
+        history_frame.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
 
-    # Настроим веса колонок и строк
-    chat_window.grid_rowconfigure(0, weight=1)
-    chat_window.grid_columnconfigure(0, weight=3)
-    chat_window.grid_columnconfigure(1, weight=1)
+        self.message_area = scrolledtext.ScrolledText(history_frame, wrap=tk.WORD, bg='black', fg='white', font=('Helvetica', 12), state=tk.DISABLED)
+        self.message_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    chat_window.protocol("WM_DELETE_WINDOW", lambda: close_chat_window(chat_window))
+        # Создаем фрейм для списка участников
+        user_list_frame = tk.Frame(chat_window, bg='black')
+        user_list_frame.grid(row=0, column=1, sticky='ns', padx=5, pady=5)
 
-def close_chat_window(window):
-    window.destroy()
-    show_window(None, None)
+        self.user_list = tk.Listbox(user_list_frame, bg='black', fg='white', font=('Helvetica', 12))
+        self.user_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-def send_message(event=None):
-    message = message_entry.get("1.0", tk.END).strip()
-    if message:
-        message_area.config(state=tk.NORMAL)
-        message_area.insert(tk.END, f"You: {message}\n")
-        message_area.config(state=tk.DISABLED)
-        message_area.yview(tk.END)
-        message_entry.delete("1.0", tk.END)
-        message_entry.configure(height=3)  # Сброс высоты поля ввода сообщений
-    return 'break'
+        # Создаем фрейм для ввода сообщений
+        input_frame = tk.Frame(chat_window, bg='black')
+        input_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=5, pady=5)
 
-def insert_newline(event=None):
-    message_entry.insert(tk.INSERT, '\n')
-    return 'break'
+        self.message_entry = tk.Text(input_frame, bg='#333', fg='white', font=('Helvetica', 12), height=3)
+        self.message_entry.grid(row=0, column=0, sticky='ew')
+        self.message_entry.bind('<Return>', self.send_message)
+        self.message_entry.bind('<Shift-Return>', self.insert_newline)
+        self.message_entry.bind('<KeyRelease>', self.adjust_text_height)
 
-def adjust_text_height(event=None):
-    # Изменение высоты поля ввода сообщений в зависимости от количества строк
-    content_height = message_entry.get("1.0", 'end-1c').count('\n') + 1
-    max_height = 6  # Максимум 6 строк
-    if content_height > 3:
-        message_entry.configure(height=min(content_height, max_height))  # Устанавливаем высоту
-    return 'break'
+        chat_window.bind('<Configure>', self.on_resize)
+        chat_window.grid_rowconfigure(0, weight=1)
+        chat_window.grid_columnconfigure(0, weight=3)
+        chat_window.grid_columnconfigure(1, weight=1)
 
-def on_resize(event):
-    update_entry_width()
-    update_user_list_width()
+        chat_window.protocol("WM_DELETE_WINDOW", lambda: self.close_chat_window(chat_window))
 
-def update_entry_width():
-    # Устанавливаем ширину для поля ввода сообщений, равную ширине истории сообщений
-    message_entry.config(width=message_area.winfo_width())
+        # Скрываем главное окно
+        self.root.withdraw()
 
-def update_user_list_width():
-    # Динамическое увеличение ширины списка пользователей
-    user_list_frame_width = message_area.winfo_width() // 2
-    user_list_frame.config(width=user_list_frame_width)
+    def close_chat_window(self, window):
+        window.destroy()
+        # Показываем главное окно
+        self.root.deiconify()
 
-# Функция для подключения к комнате
-def join_room():
-    messagebox.showinfo("Join Room", "Join Room function called.")
+    def send_message(self, event=None):
+        message = self.message_entry.get("1.0", tk.END).strip()
+        if message:
+            self.message_area.config(state=tk.NORMAL)
+            self.message_area.insert(tk.END, f"You: {message}\n")
+            self.message_area.config(state=tk.DISABLED)
+            self.message_area.yview(tk.END)
+            self.message_entry.delete("1.0", tk.END)
+            self.message_entry.configure(height=3)
+        return 'break'
 
-# Функция для отображения списка IP
-def ip_list():
-    messagebox.showinfo("IP List", "IP List function called.")
+    def insert_newline(self, event=None):
+        self.message_entry.insert(tk.INSERT, '\n')
+        return 'break'
 
-# Функция для отображения настроек комнаты
-def show_room_settings():
-    # Создаем новое окно настроек
-    settings_window = tk.Toplevel(root)
-    settings_window.title("Room Settings")
-    settings_window.iconbitmap('Config\Radmin Chat.ico')
-    settings_window.configure(bg='black')
-    settings_window.geometry("300x200")  # Начальный размер окна
-    settings_window.resizable(False, False)  # Блокируем изменение размера окна
+    def adjust_text_height(self, event=None):
+        content_height = self.message_entry.get("1.0", 'end-1c').count('\n') + 1
+        max_height = 6
+        if content_height > 3:
+            self.message_entry.configure(height=min(content_height, max_height))
+        return 'break'
 
-    # Переменные для хранения состояния
-    global password_var, password_entry_var, password_entry
-    password_var = tk.IntVar()
-    password_entry_var = tk.StringVar()
-    password_entry = None  # Инициализируем password_entry как None
+    def on_resize(self, event):
+        self.update_entry_width()
+        self.update_user_list_width()
 
-    # Создаем фрейм для размещения элементов
-    frame = tk.Frame(settings_window, bg='black')
-    frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+    def update_entry_width(self):
+        self.message_entry.config(width=self.message_area.winfo_width())
 
-    # Метка и поле для ввода имени комнаты
-    tk.Label(frame, text="Room Name", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
-    room_name_var = tk.StringVar()
-    room_name_entry = tk.Entry(frame, textvariable=room_name_var, bg='#333', fg='white', font=('Helvetica', 12))
-    room_name_entry.grid(row=0, column=1, sticky='ew', pady=5)
+    def update_user_list_width(self):
+        # Получаем ширину фрейма для списка участников
+        user_list_frame = self.user_list.master
+        user_list_frame_width = self.message_area.winfo_width() // 2
+        user_list_frame.config(width=user_list_frame_width)
 
-    # Чекбокс для включения пароля
-    password_var = tk.IntVar()
-    password_checkbox = tk.Checkbutton(frame, text="Password", variable=password_var, fg='white', bg='black', font=('Helvetica', 12), command=lambda: toggle_password_field(settings_window))
-    password_checkbox.grid(row=1, column=0, columnspan=2, sticky='w', pady=5)
+    def join_room(self):
+        messagebox.showinfo("Join Room", "Join Room function called.")
 
-    # Поле для ввода пароля
-    password_entry = tk.Entry(frame, textvariable=password_entry_var, show="*", bg='#333', fg='white', font=('Helvetica', 12))
-    password_entry.grid(row=2, column=0, columnspan=2, sticky='ew', pady=5)
+    def ip_list(self):
+        messagebox.showinfo("IP List", "IP List function called.")
 
-    # Кнопка для подтверждения настроек и создания комнаты
-    create_button = tk.Button(frame, text="Create Room", command=lambda: create_room_with_settings(settings_window, room_name_var, password_entry_var), bg='#333', fg='white', font=('Helvetica', 12))
-    create_button.grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
+    def show_room_settings(self):
+        settings_window = tk.Toplevel(self.root)
+        settings_window.title("Room Settings")
+        settings_window.iconbitmap('Config\Radmin Chat.ico')
+        settings_window.configure(bg='black')
+        settings_window.geometry("300x200")
+        settings_window.resizable(False, False)
 
-    # Привязываем событие нажатия Enter к функции создания комнаты
-    settings_window.bind('<Return>', lambda event: create_room_with_settings(settings_window, room_name_var, password_entry_var))
+        frame = tk.Frame(settings_window, bg='black')
+        frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
 
-    # Изначально проверяем состояние чекбокса для отображения поля пароля
-    toggle_password_field(settings_window)
+        tk.Label(frame, text="Room Name", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
+        room_name_var = tk.StringVar()
+        room_name_entry = tk.Entry(frame, textvariable=room_name_var, bg='#333', fg='white', font=('Helvetica', 12))
+        room_name_entry.grid(row=0, column=1, sticky='ew', pady=5)
 
-def toggle_password_field(settings_window):
-    # Включаем или скрываем поле для ввода пароля в зависимости от состояния чекбокса
-    if password_var.get() == 1:
-        password_entry.grid(row=2, column=0, columnspan=2, sticky='ew', pady=5)  # Показываем поле для ввода пароля
-    else:
-        password_entry.grid_forget()  # Скрываем поле для ввода пароля
-    settings_window.update_idletasks()  # Обновляем размер окна
+        password_var = tk.IntVar()
+        password_checkbox = tk.Checkbutton(frame, text="Password", variable=password_var, fg='white', bg='black', font=('Helvetica', 12), command=lambda: self.toggle_password_field(password_var))
+        password_checkbox.grid(row=1, column=0, columnspan=2, sticky='w', pady=5)
 
-# Функция для создания комнаты с настройками
-def create_room_with_settings(settings_window, room_name_var, password_entry_var):
-    room_name = room_name_var.get().strip()
-    password = password_entry_var.get().strip()
+        self.password_entry_var = tk.StringVar()
+        self.password_entry = tk.Entry(frame, textvariable=self.password_entry_var, show="*", bg='#333', fg='white', font=('Helvetica', 12))
+        self.password_entry.grid(row=2, column=0, columnspan=2, sticky='ew', pady=5)
 
-    if not room_name:
-        settings_window.lift()  # Поднимаем окно настроек поверх всех
-        messagebox.showerror("Error", "Please enter a Room Name.")
-        return
+        create_button = tk.Button(frame, text="Create Room", command=lambda: self.create_room_with_settings(settings_window, room_name_var, self.password_entry_var, password_var), bg='#333', fg='white', font=('Helvetica', 12))
+        create_button.grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
 
-    if password_var.get() == 1 and not password:
-        settings_window.lift()  # Поднимаем окно настроек поверх всех
-        messagebox.showerror("Error", "Password checkbox is checked, but no password entered.")
-        return
+        settings_window.bind('<Return>', lambda event: self.create_room_with_settings(settings_window, room_name_var, self.password_entry_var, password_var))
 
-    # Закрываем окно настроек после успешного создания комнаты
-    settings_window.destroy()
+        self.toggle_password_field(password_var)
 
-    # Закрываем главное окно после создания комнаты
-    root.withdraw()  # Скрываем главное окно
+    def toggle_password_field(self, password_var):
+        if password_var.get():
+            self.password_entry.grid()
+        else:
+            self.password_entry.grid_remove()
 
-    # Создаем чат окно
-    create_chat_window(room_name)
+    def create_room_with_settings(self, settings_window, room_name_var, password_var, password_checkbox):
+        room_name = room_name_var.get()
+        password = password_var.get()
 
-# Изменяем функцию создания комнаты
-def create_room():
-    show_room_settings()  # Показать окно настроек комнаты
+        if not room_name:
+            messagebox.showerror("Error", "Please enter a room name")
+            settings_window.lift()
+            return
 
-# Создаем главное окно
-root = tk.Tk()
-root.title("Radmin Chat")
-root.geometry("700x500")
-root.configure(bg='black')  # Установка черного фона
+        if password_checkbox.get() and not password:
+            messagebox.showerror("Error", "Please enter a password")
+            settings_window.lift()
+            return
 
-# Установка иконки приложения
-icon_image = create_custom_icon()
-icon_image.save('app_icon.ico')
-root.iconbitmap('app_icon.ico')
+        settings_window.destroy()
+        self.create_chat_window(room_name)
 
-# Создаем фрейм для размещения кнопок
-button_frame = tk.Frame(root, bg='black')
-button_frame.pack(pady=50, fill=tk.X)
+    def create_room(self):
+        self.show_room_settings()
 
-# Создаем кнопки
-button_style = {
-    'font': ('Helvetica', 16),
-    'bg': '#333',
-    'fg': 'white',
-    'activebackground': '#555',
-    'activeforeground': 'white',
-    'bd': 0,
-    'relief': tk.FLAT,
-    'width': 15,
-    'height': 2
-}
-
-tk.Button(button_frame, text="Create Room", command=create_room, **button_style).pack(pady=10)
-tk.Button(button_frame, text="Join Room", command=join_room, **button_style).pack(pady=10)
-tk.Button(button_frame, text="IP List", command=ip_list, **button_style).pack(pady=10)
-
-# Перехватываем закрытие окна
-root.protocol("WM_DELETE_WINDOW", hide_window)
-
-# Запускаем главное окно
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ChatApplication(root)
+    root.mainloop()

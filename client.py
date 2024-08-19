@@ -1,44 +1,74 @@
 import socket
 import threading
+import time
 from utils import save_ip_address
 
-BUFFER_SIZE = 1024
+class Client:
+    def __init__(self, host, port, nickname, room_name, password):
+        self.host = host
+        self.port = port
+        self.nickname = nickname
+        self.room_name = room_name
+        self.password = password
+        self.socket = None
+        self.message_callback = None
+        print(host)
 
+    def connect(self):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((self.host, self.port))
+        self.send_message(f"{self.nickname} {self.room_name} {self.password}")
 
-def connect_to_server(ip, port, nickname):
-    client_socket = socket.socket()
-    try:
-        client_socket.connect((ip, port))
-        print(f"Connected to server at {ip}:{port}")  # Debugging
-        save_ip_address(ip + " - Server")
-        # Отправка приветственного сообщения
-        welcome_message = f"{nickname} has joined the chat"
-        print(welcome_message)
-        client_socket.send(welcome_message.encode('utf-8'))
+    def start_listening(self, callback):
+        self.message_callback = callback
+        threading.Thread(target=self.listen_for_messages, daemon=True).start()
 
-        # Запуск потока для получения сообщений
-        threading.Thread(target=receive_client_messages, args=(client_socket,), daemon=True).start()
-
-        # Обработка пользовательского ввода для отправки сообщений
+    def listen_for_messages(self):
         while True:
-            message = input()
-            if message.strip():  # Проверяем, что сообщение не пустое после удаления пробелов
-                full_message = f"{nickname}: {message}"
-                if full_message != f"{nickname}: ":  # Проверяем, что сообщение не состоит только из никнейма и двоеточия
-                    client_socket.send(full_message.encode('utf-8'))
-    except (socket.timeout, socket.error) as e:
-        print(f"Failed to connect to server: {e}")  # Debugging
-
-
-def receive_client_messages(client_socket):
-    while True:
-        try:
-            message = client_socket.recv(BUFFER_SIZE).decode('utf-8')
-            if message:
-                print(message)
-            else:
-                print("Server closed connection")
+            try:
+                message = self.socket.recv(1024).decode('utf-8')
+                if message:
+                    if "Invalid password" in message:
+                        print("Invalid password")
+                        self.socket.close()
+                        break
+                    if self.message_callback:
+                        self.message_callback(message)
+                else:
+                    break
+            except:
                 break
-        except Exception as e:
-            print(f"Error receiving message: {e}")  # Debugging
-            break
+
+    def send_message(self, message):
+        if self.socket:
+            self.socket.send(message.encode('utf-8'))
+
+    def disconnect(self):
+        # Останавливаем прослушивание и закрываем сокет
+        self.listening = False
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
+            self.socket = None
+
+    def connect_with_timeout(self, timeout=3):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.settimeout(1)  # Устанавливаем тайм-аут в 1 секунду на попытку подключения
+
+        connected = False
+        for _ in range(timeout):
+            try:
+                self.socket.connect((self.host, self.port))
+                save_ip_address(self.host + " - Server")
+                connected = True
+                break
+            except (socket.timeout, socket.error) as e:
+                print(f"Connection attempt failed: {e}")
+                time.sleep(1)
+
+        self.socket.settimeout(None)  # Сбрасываем тайм-аут после подключения
+        if connected:
+            self.send_message(f"{self.nickname} {self.room_name} {self.password}")
+        return connected

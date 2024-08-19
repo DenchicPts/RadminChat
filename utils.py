@@ -1,5 +1,4 @@
 import os
-from pystray import MenuItem as item
 from PIL import Image, ImageDraw, ImageFont
 
 def save_ip_address(ip_address, file_path='Config/ip_history.txt'):
@@ -78,3 +77,9 @@ def create_custom_icon():
 
     return image
 
+def get_ip_list():
+    try:
+        with open('Config/ip_history.txt', 'r') as file:
+            return file.readlines()
+    except FileNotFoundError:
+        return []

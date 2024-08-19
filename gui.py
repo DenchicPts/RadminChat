@@ -26,7 +26,7 @@ class ChatApplication:
         self.server = None
 
         self.create_buttons_frame()
-
+        self.message_area = None
         self.user_listbox = None
         self.user_list = []
 
@@ -175,21 +175,24 @@ class ChatApplication:
             messagebox.showerror("Error", "Please enter a room name")
             settings_window.lift()
             return
-
         settings_window.destroy()
 
         self.root.withdraw()
         # Запускаем сервер в отдельном потоке
         def start_server_thread():
-            self.server = server.start_server("0.0.0.0", 36500, self.nickname)
+            #self.server = server.start_server("0.0.0.0", 36500, self.nickname)
+            self.server = server.Server("0.0.0.0", 36500, room_name, self.nickname)
+            self.server.start()
+
+            self.server.set_room_password(password)
 
         threading.Thread(target=start_server_thread, daemon=True).start()
 
         # Подключаемся как клиент к только что созданной комнате
         self.client = client.Client("localhost", 36500, self.nickname, room_name, password)
         self.client.connect()
-        self.client.start_listening(self.handle_message)
         self.create_chat_window(room_name, "0.0.0.0")  # Передаем IP адрес для заголовка окна
+        self.client.start_listening(self.handle_message, self.update_user_list)
 
     def show_join_room_window(self):
         join_window = tk.Toplevel(self.root)
@@ -246,11 +249,11 @@ class ChatApplication:
             # Пытаемся подключиться с тайм-аутом
             if self.client.connect_with_timeout():
                 # Если соединение успешно, запускаем прослушивание сообщений
-                self.client.start_listening(self.handle_message)
+                self.client.start_listening(self.handle_message, self.update_user_list)
                 if join_window.winfo_exists():  # Проверяем, существует ли окно
                     self.root.after(0, join_window.destroy)  # Закрываем окно после успешного подключения
                 self.root.withdraw()
-                self.root.after(0, self.create_chat_window, "Unknown Room", server_ip)  # Передаем фиксированное название комнаты
+                self.root.after(0, self.create_chat_window, self.client.room_name, server_ip)  # Передаем фиксированное название комнаты
             else:
                 # Если соединение не удалось, показываем сообщение об ошибке и возвращаем окно
                 if join_window.winfo_exists():  # Проверяем, существует ли окно
@@ -321,7 +324,7 @@ class ChatApplication:
                 # Пытаемся подключиться
                 if self.client.connect_with_timeout():
                     # Если соединение успешно, запускаем прослушивание сообщений
-                    self.client.start_listening(self.handle_message)
+                    self.client.start_listening(self.handle_message, self.update_user_list)
                     messagebox.showinfo("Success", "Connected to the server successfully!")
                     if window.winfo_exists():
                         window.destroy()

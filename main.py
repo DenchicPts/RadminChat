@@ -17,6 +17,7 @@ def main():
     nickname = load_nickname()
     if not nickname:
         save_nickname()
+        nickname = load_nickname()
 
     # Запуск GUI
     root = tk.Tk()

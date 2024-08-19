@@ -4,7 +4,7 @@ import time
 from utils import save_ip_address
 
 class Client:
-    def __init__(self, host, port, nickname, room_name, password):
+    def __init__(self, host, port, nickname, room_name="", password=""):
         self.host = host
         self.port = port
         self.nickname = nickname
@@ -12,6 +12,7 @@ class Client:
         self.password = password
         self.socket = None
         self.message_callback = None
+        self.update_user_list = None
         print(host)
 
     def connect(self):
@@ -19,8 +20,9 @@ class Client:
         self.socket.connect((self.host, self.port))
         self.send_message(f"{self.nickname} {self.room_name} {self.password}")
 
-    def start_listening(self, callback):
+    def start_listening(self, callback, update_list):
         self.message_callback = callback
+        self.update_user_list = update_list
         threading.Thread(target=self.listen_for_messages, daemon=True).start()
 
     def listen_for_messages(self):
@@ -32,11 +34,19 @@ class Client:
                         print("Invalid password")
                         self.socket.close()
                         break
-                    if self.message_callback:
+                    elif message.startswith("#ROOMNAME#"):
+                        self.room_name = message[len("#ROOMNAME#"):]
+                        print(f"Connected to room: {self.room_name}")
+                    elif message.startswith("#USERS_IP#"):
+                        users = message[len("#USERS_IP#"):].strip().split("\n")
+                        if self.message_callback:
+                            self.update_user_list(users)
+                    elif self.message_callback:
                         self.message_callback(message)
                 else:
                     break
-            except:
+            except Exception as e:
+                print(f"Error receiving message: {e}")
                 break
 
     def send_message(self, message):

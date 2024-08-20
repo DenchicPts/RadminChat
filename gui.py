@@ -1,3 +1,4 @@
+import time
 import tkinter as tk
 from tkinter import scrolledtext, messagebox
 import pystray
@@ -30,6 +31,7 @@ class ChatApplication:
         self.user_listbox = None
         self.user_list = []
 
+        self.chat_window = None
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
 
     def create_buttons_frame(self):
@@ -75,25 +77,25 @@ class ChatApplication:
         return icon
 
     def create_chat_window(self, room_name, server_ip):
-        chat_window = tk.Toplevel()
-        chat_window.iconbitmap('Config\Radmin Chat.ico')
-        chat_window.title(f"{room_name} : {server_ip}")
-        chat_window.geometry("800x600")
-        chat_window.configure(bg='black')
+        self.chat_window = tk.Toplevel()
+        self.chat_window.iconbitmap('Config\Radmin Chat.ico')
+        self.chat_window.title(f"{room_name} : {server_ip}")
+        self.chat_window.geometry("800x600")
+        self.chat_window.configure(bg='black')
 
-        history_frame = tk.Frame(chat_window, bg='black')
+        history_frame = tk.Frame(self.chat_window, bg='black')
         history_frame.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
 
         self.message_area = scrolledtext.ScrolledText(history_frame, wrap=tk.WORD, bg='black', fg='white', font=('Helvetica', 12), state=tk.DISABLED)
         self.message_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        user_list_frame = tk.Frame(chat_window, bg='black')
+        user_list_frame = tk.Frame(self.chat_window, bg='black')
         user_list_frame.grid(row=0, column=1, sticky='ns', padx=5, pady=5)
 
         self.user_listbox = tk.Listbox(user_list_frame, bg='black', fg='white', font=('Helvetica', 12))
         self.user_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        input_frame = tk.Frame(chat_window, bg='black')
+        input_frame = tk.Frame(self.chat_window, bg='black')
         input_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=5, pady=5)
 
         self.message_entry = tk.Text(input_frame, bg='#333', fg='white', font=('Helvetica', 12), height=3)
@@ -104,15 +106,15 @@ class ChatApplication:
         send_button = tk.Button(input_frame, text="Send", command=self.send_message, bg='#333', fg='white', font=('Helvetica', 12))
         send_button.grid(row=0, column=1, padx=5)
 
-        chat_window.grid_rowconfigure(0, weight=1)
-        chat_window.grid_columnconfigure(0, weight=1)
-        chat_window.grid_columnconfigure(1, weight=0)
+        self.chat_window.grid_rowconfigure(0, weight=1)
+        self.chat_window.grid_columnconfigure(0, weight=1)
+        self.chat_window.grid_columnconfigure(1, weight=0)
 
             # Закрытие окна чата с разрывом соединения и возвратом к стартовому меню
-        chat_window.protocol("WM_DELETE_WINDOW", lambda: (
+        self.chat_window.protocol("WM_DELETE_WINDOW", lambda: (
             self.client.disconnect() if self.client else None,
             self.root.deiconify(),  # Возвращаем стартовое меню
-            chat_window.destroy()  # Закрываем окно чата
+            self.chat_window.destroy()  # Закрываем окно чата
         ))
 
     def send_message(self, event=None):
@@ -127,7 +129,6 @@ class ChatApplication:
         return 'break'
 
 
-# Не работает
     def update_user_list(self, users):
         self.user_listbox.delete(0, tk.END)
         for user in users:
@@ -183,7 +184,6 @@ class ChatApplication:
             #self.server = server.start_server("0.0.0.0", 36500, self.nickname)
             self.server = server.Server("0.0.0.0", 36500, room_name, self.nickname)
             self.server.start()
-
             self.server.set_room_password(password)
 
         threading.Thread(target=start_server_thread, daemon=True).start()
@@ -192,7 +192,7 @@ class ChatApplication:
         self.client = client.Client("localhost", 36500, self.nickname, room_name, password)
         self.client.connect()
         self.create_chat_window(room_name, "0.0.0.0")  # Передаем IP адрес для заголовка окна
-        self.client.start_listening(self.handle_message, self.update_user_list)
+        self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change)
 
     def show_join_room_window(self):
         join_window = tk.Toplevel(self.root)
@@ -228,41 +228,8 @@ class ChatApplication:
     def join_room(self, join_window, server_ip_var, password_var, join_button):
         server_ip = server_ip_var.get()
         password = password_var.get()
+        self.attempt_connection_to_server(server_ip, PORT, self.nickname, password, join_window, join_button)
 
-        if not server_ip:
-            messagebox.showerror("Error", "Please enter server IP")
-            join_window.lift()
-            return
-
-        # Блокируем кнопку на 5 секунд, чтобы предотвратить спам
-        def unblock_button():
-            if join_button.winfo_exists():  # Проверяем, существует ли кнопка
-                join_button.config(state=tk.NORMAL)
-
-        join_button.config(state=tk.DISABLED)
-        self.root.after(5000, unblock_button)  # 5000 мс = 5 секунд
-
-        def attempt_connection():
-            # Создаем и запускаем клиента
-            self.client = client.Client(server_ip, 36500, self.nickname, "", password)  # Пустая строка для room_name
-
-            # Пытаемся подключиться с тайм-аутом
-            if self.client.connect_with_timeout():
-                # Если соединение успешно, запускаем прослушивание сообщений
-                self.client.start_listening(self.handle_message, self.update_user_list)
-                if join_window.winfo_exists():  # Проверяем, существует ли окно
-                    self.root.after(0, join_window.destroy)  # Закрываем окно после успешного подключения
-                self.root.withdraw()
-                self.root.after(0, self.create_chat_window, self.client.room_name, server_ip)  # Передаем фиксированное название комнаты
-            else:
-                # Если соединение не удалось, показываем сообщение об ошибке и возвращаем окно
-                if join_window.winfo_exists():  # Проверяем, существует ли окно
-                    self.root.after(0, lambda: messagebox.showerror("Connection Error", "Unable to connect to the server. Please check the IP and try again."))
-                self.client = None  # Удаляем клиента при неудаче
-                self.root.after(0, unblock_button)  # Восстанавливаем состояние кнопки
-
-        # Запускаем попытку подключения в отдельном потоке, чтобы избежать зависания UI
-        threading.Thread(target=attempt_connection, daemon=True).start()
 
     def handle_message(self, message):
         self.message_area.configure(state=tk.NORMAL)
@@ -287,7 +254,7 @@ class ChatApplication:
 
                 if server_type.strip() == "Server":
                     # Если это сервер, начинаем подключение
-                    self.connect_to_server(ip, PORT, self.nickname, ip_window)
+                    self.attempt_connection_to_server(ip, PORT, self.nickname, "", ip_window)
                 else:
                     messagebox.showinfo("Info", "Selected IP is not a server.")
             except Exception as e:
@@ -315,25 +282,54 @@ class ChatApplication:
         ip_listbox.bind("<Double-1>", on_double_click)
 
 
-    def connect_to_server(self, ip, port, nickname, window):
+
+    def attempt_connection_to_server(self, server_ip, port, nickname, password, window=None, join_button=None):
+        # Проверка на наличие IP-адреса
+        if not server_ip:
+            messagebox.showerror("Error", "Please enter server IP")
+            if window and window.winfo_exists():
+                window.lift()
+            return
+
+        # Блокируем кнопку на 5 секунд, чтобы предотвратить спам (если кнопка передана)
+        if join_button:
+            def unblock_button():
+                if join_button.winfo_exists():  # Проверяем, существует ли кнопка
+                    join_button.config(state=tk.NORMAL)
+
+            join_button.config(state=tk.DISABLED)
+            self.root.after(5000, unblock_button)  # 5000 мс = 5 секунд
+
+        # Функция попытки подключения
         def attempt_connection():
             try:
                 # Создаем и запускаем клиента
-                self.client = client.Client(ip, port, nickname, "", "")  # Пустая строка для room_name и password
+                self.client = client.Client(server_ip, port, nickname, "", password)
 
-                # Пытаемся подключиться
+                # Пытаемся подключиться с тайм-аутом
                 if self.client.connect_with_timeout():
-                    # Если соединение успешно, запускаем прослушивание сообщений
-                    self.client.start_listening(self.handle_message, self.update_user_list)
-                    messagebox.showinfo("Success", "Connected to the server successfully!")
-                    if window.winfo_exists():
-                        window.destroy()
-                        self.root.withdraw()
-                    self.root.after(0, self.create_chat_window, "Unknown Room", ip)  # Передаем фиксированное название комнаты
+
+                    if window and window.winfo_exists():
+                        self.root.after(0, window.destroy)  # Закрываем окно после успешного подключения
+
+                    self.root.withdraw()
+                    self.create_chat_window("", server_ip)
+                    time.sleep(0.10)
+                    self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change)
+
                 else:
-                    messagebox.showerror("Connection Error", "Unable to connect to the server. Please check the IP and try again.")
+                    # Если соединение не удалось, показываем сообщение об ошибке
+                    if window and window.winfo_exists():
+                        self.root.after(0, lambda: messagebox.showerror("Connection Error", "Unable to connect to the server. Please check the IP and try again."))
+                    self.client = None  # Удаляем клиента при неудаче
+                    if join_button:
+                        self.root.after(0, unblock_button)  # Восстанавливаем состояние кнопки
+
             except Exception as e:
                 messagebox.showerror("Connection Error", f"An error occurred: {str(e)}")
 
         # Запускаем попытку подключения в отдельном потоке, чтобы избежать зависания UI
         threading.Thread(target=attempt_connection, daemon=True).start()
+
+    def chat_window_name_change(self):
+        self.chat_window.title(f"{self.client.room_name} : {self.client.host}")

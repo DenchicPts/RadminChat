@@ -37,8 +37,9 @@ class Server:
         try:
             # Получаем первое сообщение от клиента (никнейм, название комнаты и пароль)
             welcome_message = client_socket.recv(BUFFER_SIZE).decode('utf-8')
+            print(welcome_message)
             if welcome_message:
-                parts = welcome_message.split(' ', 2)
+                parts = welcome_message.split('*')
                 if len(parts) < 2:
                     print(f"Invalid welcome message from {self.addresses[client_socket]}")
                     client_socket.close()
@@ -79,9 +80,10 @@ class Server:
                         new_name = message[len("#CHANGEROOMNAME#"):].strip()
                         if new_name:
                             self.room_name = new_name
+                            self.broadcast(f"#ROOMNAME#{self.room_name}")
                             self.broadcast(f"Room name changed to: {self.room_name}")
                     else:
-                        self.broadcast(message, client_socket)
+                        self.broadcast(f"{self.clients[client_socket]} : {message}", client_socket)
                 else:
                     print(f"Client {self.addresses[client_socket]} disconnected")
                     break

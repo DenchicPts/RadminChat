@@ -13,22 +13,28 @@ class Client:
         self.socket = None
         self.message_callback = None
         self.update_user_list = None
+        self.window_name_change = None
+
+        self.authenticated = False
+
         print(host)
 
     def connect(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((self.host, self.port))
-        self.send_message(f"{self.nickname} {self.room_name} {self.password}")
+        self.send_message(f"{self.nickname }*{self.room_name}*{self.password}")
 
-    def start_listening(self, callback, update_list):
+    def start_listening(self, callback, update_list, name_change):
         self.message_callback = callback
         self.update_user_list = update_list
+        self.window_name_change = name_change
         threading.Thread(target=self.listen_for_messages, daemon=True).start()
 
     def listen_for_messages(self):
         while True:
             try:
                 message = self.socket.recv(1024).decode('utf-8')
+                print("Message from server " + message)
                 if message:
                     if "Invalid password" in message:
                         print("Invalid password")
@@ -36,6 +42,8 @@ class Client:
                         break
                     elif message.startswith("#ROOMNAME#"):
                         self.room_name = message[len("#ROOMNAME#"):]
+                        self.window_name_change()
+                        self.authenticated = True  # Аутентификация успешна
                         print(f"Connected to room: {self.room_name}")
                     elif message.startswith("#USERS_IP#"):
                         users = message[len("#USERS_IP#"):].strip().split("\n")
@@ -80,5 +88,5 @@ class Client:
 
         self.socket.settimeout(None)  # Сбрасываем тайм-аут после подключения
         if connected:
-            self.send_message(f"{self.nickname} {self.room_name} {self.password}")
+            self.send_message(f"{self.nickname}*{self.room_name}*{self.password}")
         return connected

@@ -75,18 +75,23 @@ class Client:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.settimeout(1)  # Устанавливаем тайм-аут в 1 секунду на попытку подключения
 
-        connected = False
+        self.authenticated = False
         for _ in range(timeout):
             try:
                 self.socket.connect((self.host, self.port))
                 save_ip_address(self.host + " - Server")
-                connected = True
+                self.authenticated = True
                 break
             except (socket.timeout, socket.error) as e:
                 print(f"Connection attempt failed: {e}")
                 time.sleep(1)
 
         self.socket.settimeout(None)  # Сбрасываем тайм-аут после подключения
-        if connected:
+        if self.authenticated:
             self.send_message(f"{self.nickname}*{self.room_name}*{self.password}")
-        return connected
+            message = self.socket.recv(1024).decode('utf-8')
+            print(f"Connect with timeout ///{message}")
+            if message == "Invalid password":
+                self.authenticated = False
+
+        return self.authenticated

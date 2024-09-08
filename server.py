@@ -18,7 +18,7 @@ class Server:
     def start(self):
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen()
-        print(f"Server listening on {self.host}:{self.port}")
+        print(f"###Server listening on {self.host}:{self.port}")
 
         threading.Thread(target=self.accept_connections, daemon=True).start()
         threading.Thread(target=self.server_input_thread, daemon=True).start()
@@ -27,11 +27,11 @@ class Server:
         while True:
             try:
                 client_socket, client_address = self.server_socket.accept()
-                print(f"Accepted connection from {client_address}")
+                print(f"###Accepted connection from {client_address}")
                 self.addresses[client_socket] = client_address[0]
                 threading.Thread(target=self.handle_client, args=(client_socket,), daemon=True).start()
             except Exception as e:
-                print(f"Error handling client: {e}")
+                print(f"###Error handling client: {e}")
 
     def handle_client(self, client_socket):
         try:
@@ -41,7 +41,7 @@ class Server:
             if welcome_message:
                 parts = welcome_message.split('*')
                 if len(parts) < 2:
-                    print(f"Invalid welcome message from {self.addresses[client_socket]}")
+                    print(f"###Invalid welcome message from {self.addresses[client_socket]}")
                     client_socket.close()
                     return
 
@@ -51,20 +51,24 @@ class Server:
 
                 # Проверяем пароль
                 if self.room_password and self.room_password != password:
-                    print(f"Invalid password from {self.addresses[client_socket]}")
+                    print(f"###Invalid password from {self.addresses[client_socket]}")
                     client_socket.send("Invalid password".encode('utf-8'))
                     client_socket.close()
                     return
+                else:
+                    print(f"###Success connection from {self.addresses[client_socket]}")
+                    client_socket.send("Success connection".encode('utf-8'))
+                    time.sleep(0.1)
 
                 # Проверяем, не хост ли это (по IP)
                 if self.addresses[client_socket] == '127.0.0.1':
                     self.room_name = client_room_name
 
-                print(f"Room name: {self.room_name}, Password: {password}")
+                print(f"###Room name: {self.room_name}, Password: {password}")
 
                 # Добавляем клиента в список
                 self.clients[client_socket] = nickname
-                print(f"Welcome message from {self.addresses[client_socket]}: {welcome_message}")
+                print(f"###Welcome message from {self.addresses[client_socket]}: {welcome_message}")
 
                 # Отправляем клиенту название комнаты
                 client_socket.send(f"#ROOMNAME#{self.room_name}".encode('utf-8'))
@@ -85,11 +89,12 @@ class Server:
                     else:
                         self.broadcast(f"{self.clients[client_socket]} : {message}", client_socket)
                 else:
-                    print(f"Client {self.addresses[client_socket]} disconnected")
+                    print(f"###Client {self.addresses[client_socket]} disconnected")
                     break
         except Exception as e:
             print(f"Error receiving message: {e}")
         finally:
+            print(f"###Client {self.addresses[client_socket]} disconnected")
             self.remove_client(client_socket)
 
     def remove_client(self, client_socket):
@@ -106,7 +111,7 @@ class Server:
                 try:
                     client_socket.send(message.encode('utf-8'))
                 except Exception as e:
-                    print(f"Error sending message: {e}")
+                    print(f"###Error sending message: {e}")
                     self.remove_client(client_socket)
 
     def update_user_list(self):

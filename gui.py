@@ -100,11 +100,11 @@ class ChatApplication:
 
         self.message_entry = tk.Text(input_frame, bg='#333', fg='white', font=('Helvetica', 12), height=3)
         self.message_entry.grid(row=0, column=0, sticky='ew')
+        self.message_entry.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=False)
         self.message_entry.bind('<Return>', self.send_message)
         self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, '\n'))
 
-        send_button = tk.Button(input_frame, text="Send", command=self.send_message, bg='#333', fg='white', font=('Helvetica', 12))
-        send_button.grid(row=0, column=1, padx=5)
+
 
         self.chat_window.grid_rowconfigure(0, weight=1)
         self.chat_window.grid_columnconfigure(0, weight=1)
@@ -138,9 +138,9 @@ class ChatApplication:
         settings_window = tk.Toplevel(self.root)
         settings_window.title("Room Settings")
         settings_window.iconbitmap('Config/Radmin Chat.ico')
-        settings_window.geometry("400x150")
+        settings_window.geometry("300x150")
         settings_window.configure(bg='black')
-
+        settings_window.resizable(False, False)
         frame = tk.Frame(settings_window, bg='black')
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -197,7 +197,7 @@ class ChatApplication:
     def show_join_room_window(self):
         join_window = tk.Toplevel(self.root)
         join_window.title("Join Room")
-        join_window.iconbitmap('Config\Radmin Chat.ico')
+        join_window.iconbitmap('Config/Radmin Chat.ico')
         join_window.configure(bg='black')
         join_window.geometry("300x150")
         join_window.resizable(False, False)
@@ -208,18 +208,26 @@ class ChatApplication:
         # Убираем Room Name, оставляем только Server IP и Password
         tk.Label(frame, text="Server IP", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
         server_ip_var = tk.StringVar()
-        server_ip_entry = tk.Entry(frame, textvariable=server_ip_var, bg='#333', fg='white', font=('Helvetica', 12))
-        server_ip_entry.grid(row=0, column=1, sticky='ew', pady=5)
+        server_ip_entry = tk.Entry(frame, textvariable=server_ip_var, bg='#333', fg='white', font=('Helvetica', 12), width=20)
+        server_ip_entry.grid(row=0, column=1, padx=(5, 10), pady=5)
 
-        tk.Label(frame, text="Password (if any)", fg='white', bg='black', font=('Helvetica', 12)).grid(row=1, column=0, sticky='w', pady=5)
+        # Добавляем привязку события Ctrl + V для поля ввода Server IP
+        #server_ip_entry.bind('<Control-v>', lambda e: server_ip_entry.event_generate('<<Paste>>'))
+
+        tk.Label(frame, text="Password", fg='white', bg='black', font=('Helvetica', 12)).grid(row=1, column=0, sticky='w', pady=5)
         password_var = tk.StringVar()
-        password_entry = tk.Entry(frame, textvariable=password_var, show="*", bg='#333', fg='white', font=('Helvetica', 12))
-        password_entry.grid(row=1, column=1, sticky='ew', pady=5)
+        password_entry = tk.Entry(frame, textvariable=password_var, show="*", bg='#333', fg='white', font=('Helvetica', 12), width=20)
+        password_entry.grid(row=1, column=1, padx=(5, 10), pady=5)
 
-        join_button = tk.Button(frame, text="Join Room", command=lambda: self.join_room(join_window, server_ip_var, password_var, join_button), bg='#333', fg='white', font=('Helvetica', 12))
-        join_button.grid(row=2, column=0, columnspan=2, sticky='ew', pady=10)
+        # Добавляем привязку события Ctrl + V для поля ввода Password
+        #password_entry.bind('<Control-v>', lambda e: password_entry.event_generate('<<Paste>>'))
 
+        # Кнопка Join Room
+        join_button = tk.Button(frame, text="Join Room", command=lambda: self.join_room(join_window, server_ip_var, password_var, join_button), bg='#333', fg='white', font=('Helvetica', 12), width=20)
+        join_button.grid(row=2, column=0, columnspan=2, pady=10)
 
+        # Привязка события Enter к полям ввода и кнопке Join Room
+        join_window.bind('<Return>', lambda e: self.join_room(join_window, server_ip_var, password_var, join_button))
 
         join_window.grid_rowconfigure(0, weight=1)
         join_window.grid_rowconfigure(1, weight=1)

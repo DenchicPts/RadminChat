@@ -5,11 +5,6 @@
 *.enc
 *.msg
 *.pyc
-КАЛДЛЛЛЛЛ/client.py
-КАЛДЛЛЛЛЛ/main.py
-КАЛДЛЛЛЛЛ/server.py
 /output
-/Config
-/Config
-/output
-/output/main
+/Config/nickname.txt
+/Config/ip_list.txt

@@ -1,12 +1,15 @@
+import subprocess
 import time
 import tkinter as tk
-from tkinter import scrolledtext, messagebox
+from tkinter import scrolledtext, messagebox, PhotoImage, filedialog, ttk
 import pystray
 from pystray import MenuItem as item
 import threading
-from utils import create_custom_icon
+import utils
 import client
 import server
+import os
+from PIL import Image, ImageTk
 from utils import get_ip_list
 from main import PORT
 
@@ -18,7 +21,7 @@ class ChatApplication:
         self.root.geometry("700x500")
         self.root.configure(bg='black')
 
-        self.icon_image = create_custom_icon()
+        self.icon_image = utils.create_custom_icon()
         self.icon_image.save('Config/Radmin Chat.ico')
         self.root.iconbitmap('Config/Radmin Chat.ico')
 
@@ -70,15 +73,16 @@ class ChatApplication:
         self.root.deiconify()
 
     def create_tray_icon(self):
-        icon_image = create_custom_icon()
+        icon_image = utils.create_custom_icon()
         menu = (item('Show', self.show_window), item('Quit', self.quit_window))
         icon = pystray.Icon("test", icon_image, "Radmin Chat", menu)
         threading.Thread(target=icon.run, daemon=True).start()
         return icon
 
+
     def create_chat_window(self, room_name, server_ip):
         self.chat_window = tk.Toplevel()
-        self.chat_window.iconbitmap('Config\Radmin Chat.ico')
+        self.chat_window.iconbitmap('Config/Radmin Chat.ico')
         self.chat_window.title(f"{room_name} : {server_ip}")
         self.chat_window.geometry("800x600")
         self.chat_window.configure(bg='black')
@@ -98,29 +102,61 @@ class ChatApplication:
         input_frame = tk.Frame(self.chat_window, bg='black')
         input_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=5, pady=5)
 
-        self.message_entry = tk.Text(input_frame, bg='#333', fg='white', font=('Helvetica', 12), height=3)
-        self.message_entry.grid(row=0, column=0, sticky='ew')
-        self.message_entry.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=False)
+        # Загрузка иконок с корректировкой их размера до 35x35
+        paperclip_icon = Image.open("Config/paperclip_icon.png").resize((35, 35))
+        mic_icon = Image.open("Config/microphone_icon.png").resize((35, 35))
+        smile_icon = Image.open("Config/smile_icon.png").resize((35, 35))
+        save_icon = Image.open("Config/save_icon.png").resize((35, 35))
+
+        # Преобразование изображений для работы с Tkinter
+        paperclip_icon_tk = ImageTk.PhotoImage(paperclip_icon)
+        mic_icon_tk = ImageTk.PhotoImage(mic_icon)
+        smile_icon_tk = ImageTk.PhotoImage(smile_icon)
+        save_icon_tk = ImageTk.PhotoImage(save_icon)
+
+        # Создание кнопки для скрепки с прозрачным фоном
+        self.paperclip_button = tk.Button(input_frame, image=paperclip_icon_tk, command=self.attach_file, bg='black', borderwidth=0, highlightthickness=0)
+        self.paperclip_button.image = paperclip_icon_tk  # Сохраняем ссылку на изображение
+        self.paperclip_button.pack(side=tk.LEFT, padx=(0, 5))
+
+        # Поле для ввода сообщений (в центре), корректируем высоту
+        self.message_entry = tk.Text(input_frame, bg='#333', fg='white', font=('Helvetica', 12), height=2, width=60)
+        self.message_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.message_entry.bind('<Return>', self.send_message)
-        self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, '\n'))
+        self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, ''))
 
+        # Создание кнопок для микрофона, смайлика и сохранения чата с прозрачным фоном
+        self.mic_button = tk.Button(input_frame, image=mic_icon_tk, command=self.record_audio, bg='black', borderwidth=0, highlightthickness=0)
+        self.mic_button.image = mic_icon_tk  # Сохраняем ссылку на изображение
+        self.mic_button.pack(side=tk.LEFT, padx=(5, 5))
 
+        self.smile_button = tk.Button(input_frame, image=smile_icon_tk, command=self.open_emoji_menu, bg='black', borderwidth=0, highlightthickness=0)
+        self.smile_button.image = smile_icon_tk  # Сохраняем ссылку на изображение
+        self.smile_button.pack(side=tk.LEFT, padx=(5, 5))
 
+        self.save_button = tk.Button(input_frame, image=save_icon_tk, command=self.save_chat, bg='black', borderwidth=0, highlightthickness=0)
+        self.save_button.image = save_icon_tk  # Сохраняем ссылку на изображение
+        self.save_button.pack(side=tk.LEFT, padx=(5, 0))
+
+        # Настройка пропорций сетки для правильного отображения
         self.chat_window.grid_rowconfigure(0, weight=1)
         self.chat_window.grid_columnconfigure(0, weight=1)
         self.chat_window.grid_columnconfigure(1, weight=0)
 
-            # Закрытие окна чата с разрывом соединения и возвратом к стартовому меню
         self.chat_window.protocol("WM_DELETE_WINDOW", lambda: (
             self.client.disconnect() if self.client else None,
-            self.root.deiconify(),  # Возвращаем стартовое меню
-            self.chat_window.destroy()  # Закрываем окно чата
+            self.root.deiconify(),
+            self.chat_window.destroy()
         ))
-
     def send_message(self, event=None):
         message = self.message_entry.get("1.0", tk.END).strip()
         if message:
-            self.client.send_message(message)
+            if not message.startswith("#"):
+                message_to_send = "#MESSAGE#" + message
+            else:
+                message_to_send = message
+
+            self.client.send_message(message_to_send)
             self.message_entry.delete("1.0", tk.END)
             self.message_area.configure(state=tk.NORMAL)
             self.message_area.insert(tk.END, f"You: {message}\n")
@@ -138,28 +174,41 @@ class ChatApplication:
         settings_window = tk.Toplevel(self.root)
         settings_window.title("Room Settings")
         settings_window.iconbitmap('Config/Radmin Chat.ico')
-        settings_window.geometry("300x150")
+        settings_window.geometry("350x200")  # Увеличиваем размер окна для всех элементов
         settings_window.configure(bg='black')
-        settings_window.resizable(False, False)
+        #settings_window.resizable(False, False)
+
         frame = tk.Frame(settings_window, bg='black')
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
+        # Поле ввода имени комнаты
         tk.Label(frame, text="Room Name", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
         room_name_var = tk.StringVar()
         room_name_entry = tk.Entry(frame, textvariable=room_name_var, bg='#333', fg='white', font=('Helvetica', 12))
         room_name_entry.grid(row=0, column=1, sticky='ew', pady=5)
 
+        # Выпадающий список IP-адресов
+        tk.Label(frame, text="Host IP", fg='white', bg='black', font=('Helvetica', 12)).grid(row=1, column=0, sticky='w', pady=5)
+
+        ip_var = tk.StringVar()
+        available_ips = utils.get_available_ip_addresses()  # Предполагается, что у вас есть эта функция
+        ip_combobox = ttk.Combobox(frame, textvariable=ip_var, values=available_ips, font=('Helvetica', 12))
+        ip_combobox.grid(row=1, column=1, sticky='ew', pady=5)
+        ip_combobox.current(0)  # Устанавливаем первый IP по умолчанию
+
+        # Поле для пароля
         show_password_var = tk.BooleanVar()
         show_password_checkbox = tk.Checkbutton(frame, text="Password", bg='black', fg='white', font=('Helvetica', 12), variable=show_password_var, command=lambda: self.toggle_password_field(password_entry))
-        show_password_checkbox.grid(row=1, column=0, sticky='w', pady=5)
+        show_password_checkbox.grid(row=2, column=0, sticky='w', pady=5)
 
         password_var = tk.StringVar()
         password_entry = tk.Entry(frame, textvariable=password_var, show="*", bg='#333', fg='white', font=('Helvetica', 12))
-        password_entry.grid(row=1, column=1, sticky='ew', pady=5)
+        password_entry.grid(row=2, column=1, sticky='ew', pady=5)
         password_entry.grid_remove()  # Скрываем поле для пароля по умолчанию
 
-        create_button = tk.Button(frame, text="Create Room", command=lambda: self.create_room_with_settings(settings_window, room_name_var, password_var), bg='#333', fg='white', font=('Helvetica', 12))
-        create_button.grid(row=2, column=0, columnspan=2, sticky='ew', pady=10)
+        # Кнопка создания комнаты
+        create_button = tk.Button(frame, text="Create Room", command=lambda: self.create_room_with_settings(settings_window, room_name_var, password_var, ip_var), bg='#333', fg='white', font=('Helvetica', 12))
+        create_button.grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
 
 
     def toggle_password_field(self, password_entry):
@@ -168,10 +217,10 @@ class ChatApplication:
         else:
             password_entry.grid()
 
-    def create_room_with_settings(self, settings_window, room_name_var, password_var):
+    def create_room_with_settings(self, settings_window, room_name_var, password_var, ip_var):
         room_name = room_name_var.get()
         password = password_var.get()
-
+        selected_ip = ip_var.get()
         if not room_name:
             messagebox.showerror("Error", "Please enter a room name")
             settings_window.lift()
@@ -182,17 +231,20 @@ class ChatApplication:
         # Запускаем сервер в отдельном потоке
         def start_server_thread():
             #self.server = server.start_server("0.0.0.0", 36500, self.nickname)
-            self.server = server.Server("0.0.0.0", 36500, room_name, self.nickname)
+            self.server = server.Server(selected_ip, 36500, room_name, self.nickname)
             self.server.start()
             self.server.set_room_password(password)
 
         threading.Thread(target=start_server_thread, daemon=True).start()
 
         # Подключаемся как клиент к только что созданной комнате
-        self.client = client.Client("localhost", 36500, self.nickname, room_name, password)
+        if not selected_ip == "0.0.0.0":
+            self.client = client.Client(selected_ip, 36500, self.nickname, room_name, password)
+        else:
+            self.client = client.Client("localhost", 36500, self.nickname, room_name, password)
         self.client.connect()
-        self.create_chat_window(room_name, "0.0.0.0")  # Передаем IP адрес для заголовка окна
-        self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change)
+        self.create_chat_window(room_name, selected_ip)  # Передаем IP адрес для заголовка окна
+        self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change, self.receive_file)
 
     def show_join_room_window(self):
         join_window = tk.Toplevel(self.root)
@@ -323,7 +375,7 @@ class ChatApplication:
                     self.root.withdraw()
                     self.create_chat_window("", server_ip)
                     time.sleep(0.10)
-                    self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change)
+                    self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change, self.receive_file )
 
                 else:
                     # Если соединение не удалось, показываем сообщение об ошибке
@@ -341,3 +393,82 @@ class ChatApplication:
 
     def chat_window_name_change(self):
         self.chat_window.title(f"{self.client.room_name} : {self.client.host}")
+
+    def attach_file(self):
+        # Открытие диалогового окна для выбора файла
+        file_path = filedialog.askopenfilename()
+
+        if file_path:
+            # Сообщаем клиенту отправить файл на сервер
+            self.client.send_file(file_path)
+
+            # Отображаем сообщение в чате
+            file_name = os.path.basename(file_path)
+            self.message_area.config(state=tk.NORMAL)
+            self.message_area.insert(tk.END, f"Вы отправили файл: {file_name}\n")
+            self.message_area.config(state=tk.DISABLED)
+
+    def record_audio(self):
+        # Логика для записи аудио
+        print("Record audio clicked!")
+
+    def open_emoji_menu(self):
+        # Логика для открытия меню эмодзи
+        print("Emoji menu clicked!")
+
+    def save_chat(self):
+        # Логика для сохранения чата
+        print("Save chat clicked!")
+
+    def receive_file(self, file_name, file_path, sender_nickname):
+        # Отображаем информацию о получении файла в чате
+        self.message_area.config(state=tk.NORMAL)
+
+        if file_name.lower().endswith((".png", ".jpg", ".jpeg")):
+            # Если это изображение, отображаем его в чате
+            #self.message_area.insert(tk.END, f"Получено изображение: {file_name}\n")
+            self.display_image_in_chat(file_path + f"\\{file_name}")
+        else:
+            # Создаём выделенный текст с файлом как ссылкой
+            self.message_area.insert(tk.END, f"{sender_nickname}: ", "normal")
+            self.message_area.insert(tk.END, file_name, "file_link")
+            self.message_area.insert(tk.END, "\n")
+
+            # Добавляем возможность открыть файл по клику
+            self.message_area.tag_bind("file_link", "<Button-1>", lambda e: self.open_file_folder(file_path))
+            self.message_area.tag_configure("file_link", foreground="blue", underline=True)
+
+        self.message_area.config(state=tk.DISABLED)
+
+    def display_image_in_chat(self, file_path):
+        try:
+            # Открываем изображение и изменяем его размер
+            img = Image.open(file_path)
+            img.thumbnail((200, 200))  # Ограничиваем размер изображения для чата
+            img = ImageTk.PhotoImage(img)
+
+            # Создаем изображение в текстовом поле
+            self.message_area.image_create(tk.END, image=img)
+            self.message_area.insert(tk.END, "\n")
+
+            # Сохраняем ссылку на изображение в список, чтобы избежать garbage collection
+            if not hasattr(self, 'images'):
+                self.images = []  # Инициализируем список, если его ещё нет
+            self.images.append(img)
+
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось загрузить изображение: {e}")
+    def open_file_folder(self, file_path):
+        # Получаем путь к папке, где находится файл
+
+        folder_path = os.getcwd() + f"\\{file_path}"
+        if os.path.exists(folder_path):
+            # Открываем папку в проводнике
+            if os.name == 'nt':  # Проверяем, что мы на Windows
+                subprocess.Popen(f'explorer "{folder_path}"')
+            elif os.name == 'posix':  # Если на macOS или Linux
+                subprocess.Popen(['xdg-open', folder_path])
+            else:
+                messagebox.showerror("Ошибка", "Операционная система не поддерживается")
+        else:
+            messagebox.showerror("Ошибка", f"Папка не найдена: {folder_path}")

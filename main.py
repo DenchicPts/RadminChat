@@ -1,6 +1,7 @@
 import tkinter as tk
 import gui
-from utils import save_nickname, load_nickname, save_ip_address
+import utils
+
 
 HOST = '0.0.0.0'
 PORT = 36500
@@ -14,10 +15,16 @@ def connect_to_server(ip, port, nickname):
     client.connect_to_server(ip, port, nickname)
 
 def main():
-    nickname = load_nickname()
+    nickname = utils.load_nickname()
     if not nickname:
-        save_nickname()
-        nickname = load_nickname()
+        utils.save_nickname()
+        nickname = utils.load_nickname()
+
+#pisun big
+    if not nickname:
+        while True:
+            nickname = nickname
+
 
     # Запуск GUI
     root = tk.Tk()

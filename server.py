@@ -1,5 +1,8 @@
 import socket
 import threading
+import os
+import gc
+import utils
 import time
 
 BUFFER_SIZE = 1024
@@ -57,11 +60,11 @@ class Server:
                     return
                 else:
                     print(f"###Success connection from {self.addresses[client_socket]}")
-                    client_socket.send("Success connection".encode('utf-8'))
-                    time.sleep(0.1)
+                    client_socket.send("#MESSAGE#Success connection".encode('utf-8'))
+                    time.sleep(0.15)
 
                 # Проверяем, не хост ли это (по IP)
-                if self.addresses[client_socket] == '127.0.0.1':
+                if self.addresses[client_socket] in {self.host, "127.0.0.1"}:
                     self.room_name = client_room_name
 
                 print(f"###Room name: {self.room_name}, Password: {password}")
@@ -77,17 +80,46 @@ class Server:
                 self.update_user_list()
 
             while True:
-                message = client_socket.recv(BUFFER_SIZE).decode('utf-8')
-                if message:
+                gc.collect()
+
+                message = client_socket.recv(BUFFER_SIZE * 10000)
+                try:
+                    message = message.decode('utf-8')
+                    decoded_message = True
+                except UnicodeDecodeError:
+                    decoded_message = False
+
+                if message and decoded_message:
                     print(f"Received message from {self.addresses[client_socket]}: {message}")
-                    if message.startswith("#CHANGEROOMNAME#") and self.addresses[client_socket] == '127.0.0.1':
+                    if message.startswith("#CHANGEROOMNAME#") and self.addresses[client_socket] in {self.host, "127.0.0.1"}:
                         new_name = message[len("#CHANGEROOMNAME#"):].strip()
                         if new_name:
                             self.room_name = new_name
                             self.broadcast(f"#ROOMNAME#{self.room_name}")
                             self.broadcast(f"Room name changed to: {self.room_name}")
-                    else:
+
+                    elif message.startswith("FILE:"):
+                        parts = message.split(":")
+                        sender_nickname = parts[1]  # Получаем никнейм отправителя
+                        file_name = parts[2]
+                        file_size = int(parts[3])
+                        received_size = 0
+                        file_data = b""
+
+                    elif message.startswith("#MESSAGE#"):
                         self.broadcast(f"{self.clients[client_socket]} : {message}", client_socket)
+
+                elif message and not decoded_message:
+                    file_data += message
+                    received_size += len(message)
+                    if received_size >= file_size:
+                        utils.file_save(file_name, file_data)
+                        threading.Thread(target=self.send_file, args=(client_socket, file_name, file_size, file_data, sender_nickname)).start()
+                        del file_data, received_size
+
+                elif message:
+                    del message
+
                 else:
                     print(f"###Client {self.addresses[client_socket]} disconnected")
                     break
@@ -130,3 +162,17 @@ class Server:
 
     def set_room_password(self, password):
         self.room_password = password
+
+    def send_file(self, client_socket, file_name, file_size, file_data, nickname):
+        try:
+            # Пересылка файла другим клиентам
+            for client in self.clients:
+                #if not client == client_socket:
+                client.send(f"FILE:{nickname}:{file_name}:{file_size}".encode('utf-8'))
+                client.sendall(file_data)
+
+            del file_data
+            gc.collect()
+
+        except Exception as e:
+            print(f"Ошибка при получении файла: {e}")

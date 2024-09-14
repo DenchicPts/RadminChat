@@ -1,4 +1,6 @@
 import os
+import socket
+import psutil
 from PIL import Image, ImageDraw, ImageFont
 
 def save_ip_address(ip_address, file_path='Config/ip_history.txt'):
@@ -83,3 +85,32 @@ def get_ip_list():
             return file.readlines()
     except FileNotFoundError:
         return []
+
+
+def file_save(file_name, file_data, folder_to_save="HOST"):
+    # Сохранение файла на сервере
+    save_folder = f"Save/{folder_to_save}"
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+
+    file_path = os.path.join(save_folder, file_name)
+    with open(file_path, "wb") as f:
+        f.write(file_data)
+        f.close()
+        del file_data
+    print(f"Файл {file_name} получен и сохранён.")
+
+def get_available_ip_addresses():
+    ip_addresses = []
+
+    # Добавляем 0.0.0.0 как общий IP
+    ip_addresses.append("0.0.0.0")
+    try:
+        # Получаем локальные IP-адреса сетевых интерфейсов
+        for iface_name, iface_addresses in psutil.net_if_addrs().items():
+            for address in iface_addresses:
+                if address.family == socket.AF_INET:
+                    ip_addresses.append(address.address)
+    except Exception as e:
+        print(e)
+    return ip_addresses

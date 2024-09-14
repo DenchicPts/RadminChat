@@ -1,7 +1,9 @@
 import socket
 import threading
 import time
-from utils import save_ip_address
+import os
+import gc
+import utils
 
 class Client:
     def __init__(self, host, port, nickname, room_name="", password=""):
@@ -14,7 +16,7 @@ class Client:
         self.message_callback = None
         self.update_user_list = None
         self.window_name_change = None
-
+        self.file_callback = None
         self.authenticated = False
 
         print(host)
@@ -24,18 +26,26 @@ class Client:
         self.socket.connect((self.host, self.port))
         self.send_message(f"{self.nickname }*{self.room_name}*{self.password}")
 
-    def start_listening(self, callback, update_list, name_change):
+    def start_listening(self, callback, update_list, name_change, receive_file_gui ):
         self.message_callback = callback
         self.update_user_list = update_list
         self.window_name_change = name_change
+        self.file_callback = receive_file_gui
         threading.Thread(target=self.listen_for_messages, daemon=True).start()
 
     def listen_for_messages(self):
         while True:
             try:
-                message = self.socket.recv(1024).decode('utf-8')
-                print("Message from server " + message)
-                if message:
+                gc.collect()
+                message = self.socket.recv(1024 * 10000)
+                try:
+                    message = message.decode('utf-8')
+                    decoded_message = True
+                except UnicodeDecodeError:
+                    decoded_message = False
+
+
+                if message and decoded_message:
                     if "Invalid password" in message:
                         print("Invalid password")
                         self.socket.close()
@@ -45,12 +55,34 @@ class Client:
                         self.window_name_change()
                         self.authenticated = True  # Аутентификация успешна
                         print(f"Connected to room: {self.room_name}")
+
                     elif message.startswith("#USERS_IP#"):
                         users = message[len("#USERS_IP#"):].strip().split("\n")
                         if self.message_callback:
                             self.update_user_list(users)
-                    elif self.message_callback:
-                        self.message_callback(message)
+
+                    elif message.startswith("FILE:"):
+                        parts = message.split(":")
+                        sender_nickname = parts[1]  # Получаем никнейм отправителя
+                        file_name = parts[2]
+                        file_size = int(parts[3])
+                        received_size = 0
+                        file_data = b""
+
+                    elif message.startswith("#MESSAGE#"):
+                        message_to_send = message[len("#MESSAGE#"):].strip()
+                        self.message_callback(message_to_send)
+
+                elif message and not decoded_message:
+                    file_data += message
+                    received_size += len(message)
+                    if received_size >= file_size:
+                        utils.file_save(file_name, file_data, self.host)
+                        del file_data, received_size
+                        file_path = f"Save\\{self.host}"
+                        if self.file_callback:
+                            self.file_callback(file_name, file_path, sender_nickname)
+
                 else:
                     break
             except Exception as e:
@@ -79,7 +111,7 @@ class Client:
         for _ in range(timeout):
             try:
                 self.socket.connect((self.host, self.port))
-                save_ip_address(self.host + " - Server")
+                utils.save_ip_address(self.host + " - Server")
                 self.authenticated = True
                 break
             except (socket.timeout, socket.error) as e:
@@ -95,3 +127,45 @@ class Client:
                 self.authenticated = False
 
         return self.authenticated
+
+
+    # Заготовка под большое количество файлов
+    def send_file(self, file_path):
+        # Отправка файла в отдельном потоке
+        threading.Thread(target=self.send_file_thread, args=(file_path,)).start()
+
+
+    def send_file_thread(self, file_path):
+        try:
+            file_name = os.path.basename(file_path)
+            file_size = os.path.getsize(file_path)
+            chunk_size = 1024 * 10000 # 10 MBait speed
+
+
+            # Отправка заголовка с информацией о файле
+            file_info_message = f"FILE:{self.nickname}:{file_name}:{file_size}"
+            self.socket.send(file_info_message.encode('utf-8'))
+            time.sleep(0.1)
+
+            # Отправляем файл чанками
+            with open(file_path, "rb") as f:
+                sent_size = 0
+                while sent_size < file_size:
+                    # Читаем кусок данных
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break  # Если больше нечего читать, выходим из цикла
+
+                    # Отправляем чанк
+                    self.socket.sendall(chunk)
+                    sent_size += len(chunk)
+                    # Небольшая задержка, чтобы избежать забивки сокета
+                    del chunk
+                    time.sleep(0.01)
+
+            gc.collect()
+
+            print(f"Файл {file_name} отправлен на сервер.")
+        except Exception as e:
+            print(f"Ошибка при отправке файла: {e}")
+

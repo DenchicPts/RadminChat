@@ -4,6 +4,7 @@ import time
 import os
 import gc
 import utils
+import asyncio
 
 class Client:
     def __init__(self, host, port, nickname, room_name="", password=""):
@@ -26,7 +27,7 @@ class Client:
         self.socket.connect((self.host, self.port))
         self.send_message(f"{self.nickname }*{self.room_name}*{self.password}")
 
-    def start_listening(self, callback, update_list, name_change, receive_file_gui ):
+    def start_listening(self, callback, update_list, name_change, receive_file_gui):
         self.message_callback = callback
         self.update_user_list = update_list
         self.window_name_change = name_change
@@ -132,10 +133,10 @@ class Client:
     # Заготовка под большое количество файлов
     def send_file(self, file_path):
         # Отправка файла в отдельном потоке
-        threading.Thread(target=self.send_file_thread, args=(file_path,)).start()
+        asyncio.run(self.send_file_thread(file_path))
 
 
-    def send_file_thread(self, file_path):
+    async def send_file_thread(self, file_path):
         try:
             file_name = os.path.basename(file_path)
             file_size = os.path.getsize(file_path)

@@ -4,6 +4,7 @@ import os
 import gc
 import utils
 import time
+import asyncio
 
 BUFFER_SIZE = 1024
 
@@ -23,10 +24,12 @@ class Server:
         self.server_socket.listen()
         print(f"###Server listening on {self.host}:{self.port}")
 
-        threading.Thread(target=self.accept_connections, daemon=True).start()
-        threading.Thread(target=self.server_input_thread, daemon=True).start()
+        # Запуск асинхронной функции accept_connections
+        asyncio.run(self.accept_connections())
+        asyncio.run(self.server_input_thread())
 
-    def accept_connections(self):
+    async def accept_connections(self):
+        #loop = asyncio.get_running_loop()
         while True:
             try:
                 client_socket, client_address = self.server_socket.accept()
@@ -150,7 +153,7 @@ class Server:
         user_list = [f"{nickname} - {ip}" for client_socket, nickname in self.clients.items() if (ip := self.addresses.get(client_socket))]
         self.broadcast(f"#USERS_IP#\n" + "\n".join(user_list))
 
-    def server_input_thread(self):
+    async def server_input_thread(self):
         while True:
             try:
                 message = input()

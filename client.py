@@ -37,7 +37,6 @@ class Client:
     def listen_for_messages(self):
         while True:
             try:
-                gc.collect()
                 message = self.socket.recv(1024 * 10000)
                 try:
                     message = message.decode('utf-8')
@@ -47,6 +46,7 @@ class Client:
 
 
                 if message and decoded_message:
+                    print(f"CLIENT Received {message}")
                     if "Invalid password" in message:
                         print("Invalid password")
                         self.socket.close()
@@ -133,10 +133,11 @@ class Client:
     # Заготовка под большое количество файлов
     def send_file(self, file_path):
         # Отправка файла в отдельном потоке
-        asyncio.run(self.send_file_thread(file_path))
+        threading.Thread(target=self.send_file_thread, args=(file_path,), daemon=True).start()
 
 
-    async def send_file_thread(self, file_path):
+
+    def send_file_thread(self, file_path):
         try:
             file_name = os.path.basename(file_path)
             file_size = os.path.getsize(file_path)

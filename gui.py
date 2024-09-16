@@ -11,7 +11,8 @@ import server
 import os
 from PIL import Image, ImageTk
 from utils import get_ip_list
-from main import PORT
+
+PORT = 36500
 
 class ChatApplication:
     def __init__(self, root, nickname):
@@ -176,14 +177,16 @@ class ChatApplication:
         settings_window.iconbitmap('Config/Radmin Chat.ico')
         settings_window.geometry("350x200")  # Увеличиваем размер окна для всех элементов
         settings_window.configure(bg='black')
-        #settings_window.resizable(False, False)
+        settings_window.resizable(False, False)
 
         frame = tk.Frame(settings_window, bg='black')
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
+        default_room_name, default_password = utils.load_room_settings()
+
         # Поле ввода имени комнаты
         tk.Label(frame, text="Room Name", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
-        room_name_var = tk.StringVar()
+        room_name_var = tk.StringVar(value=default_room_name)
         room_name_entry = tk.Entry(frame, textvariable=room_name_var, bg='#333', fg='white', font=('Helvetica', 12))
         room_name_entry.grid(row=0, column=1, sticky='ew', pady=5)
 
@@ -201,7 +204,7 @@ class ChatApplication:
         show_password_checkbox = tk.Checkbutton(frame, text="Password", bg='black', fg='white', font=('Helvetica', 12), variable=show_password_var, command=lambda: self.toggle_password_field(password_entry))
         show_password_checkbox.grid(row=2, column=0, sticky='w', pady=5)
 
-        password_var = tk.StringVar()
+        password_var = tk.StringVar(value=default_password)
         password_entry = tk.Entry(frame, textvariable=password_var, show="*", bg='#333', fg='white', font=('Helvetica', 12))
         password_entry.grid(row=2, column=1, sticky='ew', pady=5)
         password_entry.grid_remove()  # Скрываем поле для пароля по умолчанию

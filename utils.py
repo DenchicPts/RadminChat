@@ -1,3 +1,4 @@
+import json
 import os
 import socket
 import psutil
@@ -18,23 +19,25 @@ def save_ip_address(ip_address, file_path='Config/ip_history.txt'):
             file.write(ip_address + '\n')
 
 
-def load_nickname():
-    try:
-        with open('Config/nickname.txt', 'r') as nick:
-            return nick.read().strip()
-    except FileNotFoundError as e:
-        return
 
-
-def save_nickname():
+def save_nickname_settings(filename="settings.json"):
     nickname = input("Enter your nickname: ").strip()
+    if not os.path.exists(filename):
+        # Если файл не существует, создаём новый с пустым содержимым
+        data = {}
+    else:
+        # Если файл существует, читаем его содержимое
+        with open(filename, "r") as file:
+            data = json.load(file)
 
-    # Проверяем, существует ли папка 'Config', и создаем её, если нет
-    if not os.path.exists('Config'):
-        os.makedirs('Config')
+    # Обновляем данные
+    data["nickname"] = nickname
 
-    with open('Config/nickname.txt', 'a') as nick:
-        nick.write(nickname)
+    # Сохраняем обновлённые данные в файл
+    with open(filename, "w") as file:
+        json.dump(data, file, indent=4)
+
+    return nickname
 
 def create_custom_icon():
     # Размер иконки
@@ -114,3 +117,46 @@ def get_available_ip_addresses():
     except Exception as e:
         print(e)
     return ip_addresses
+
+def save_room_settings(room_name, password, filename="settings.json"):
+    # Проверяем, существует ли файл
+    if not os.path.exists(filename):
+        # Если файл не существует, создаём новый с пустым содержимым
+        data = {}
+    else:
+        # Если файл существует, читаем его содержимое
+        with open(filename, "r") as file:
+            data = json.load(file)
+
+    # Обновляем данные
+    data["room_name"] = room_name
+    data["password"] = password
+
+    # Сохраняем обновлённые данные в файл
+    with open(filename, "w") as file:
+        json.dump(data, file, indent=4)
+
+def load_room_settings(filename="settings.json"):
+    # Проверяем, существует ли файл
+    if not os.path.exists(filename):
+        return None, None
+
+    # Читаем данные из файла
+    with open(filename, "r") as file:
+        data = json.load(file)
+
+    # Возвращаем название комнаты, если оно существует
+    return data.get("room_name", ""), data.get("password", "")
+
+
+def load_nickname_settings(filename="settings.json"):
+    # Проверяем, существует ли файл
+    if not os.path.exists(filename):
+        return None
+
+
+    # Читаем данные из файла
+    with open(filename, "r") as file:
+        data = json.load(file)
+
+    return data.get("nickname", "")

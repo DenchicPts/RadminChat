@@ -28,6 +28,7 @@ class Server:
         asyncio.run(self.accept_connections())
         asyncio.run(self.server_input_thread())
 
+
     async def accept_connections(self):
         #loop = asyncio.get_running_loop()
         while True:
@@ -78,8 +79,9 @@ class Server:
 
                 # Отправляем клиенту название комнаты
                 client_socket.send(f"#ROOMNAME#{self.room_name}".encode('utf-8'))
+                utils.save_room_settings(self.room_name, self.room_password)
                 time.sleep(0.25)
-                self.broadcast(f"Welcome to the chat, {nickname}!", client_socket)
+                self.broadcast(f"#MESSAGE#Welcome to the chat, {nickname}!", client_socket)
                 self.update_user_list()
 
             while True:
@@ -93,11 +95,12 @@ class Server:
                     decoded_message = False
 
                 if message and decoded_message:
-                    print(f"Received message from {self.addresses[client_socket]}: {message}")
+                    print(f"SERVER Received message from {self.addresses[client_socket]}: {message}")
                     if message.startswith("#CHANGEROOMNAME#") and self.addresses[client_socket] in {self.host, "127.0.0.1"}:
                         new_name = message[len("#CHANGEROOMNAME#"):].strip()
                         if new_name:
                             self.room_name = new_name
+                            utils.save_room_settings(self.room_name, self.room_password)
                             self.broadcast(f"#ROOMNAME#{self.room_name}")
                             self.broadcast(f"Room name changed to: {self.room_name}")
 
@@ -110,7 +113,8 @@ class Server:
                         file_data = b""
 
                     elif message.startswith("#MESSAGE#"):
-                        self.broadcast(f"{self.clients[client_socket]} : {message}", client_socket)
+                        message_to_send = message[len("#MESSAGE#"):].strip()
+                        self.broadcast(f"#MESSAGE#{self.clients[client_socket]}: {message_to_send}", client_socket)
 
                 elif message and not decoded_message:
                     file_data += message
@@ -170,9 +174,9 @@ class Server:
         try:
             # Пересылка файла другим клиентам
             for client in self.clients:
-                #if not client == client_socket:
-                client.send(f"FILE:{nickname}:{file_name}:{file_size}".encode('utf-8'))
-                client.sendall(file_data)
+                if not client == client_socket:
+                    client.send(f"FILE:{nickname}:{file_name}:{file_size}".encode('utf-8'))
+                    client.sendall(file_data)
 
             del file_data
             gc.collect()

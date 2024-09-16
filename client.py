@@ -3,6 +3,8 @@ import threading
 import time
 import os
 import gc
+
+import database
 import utils
 import asyncio
 
@@ -55,11 +57,13 @@ class Client:
                         self.room_name = message[len("#ROOMNAME#"):]
                         self.window_name_change()
                         self.authenticated = True  # Аутентификация успешна
-                        print(f"Connected to room: {self.room_name}")
+                        database.save_connection(True, self.host, self.room_name)
+                        # print(f"Connected to room: {self.room_name}")
 
                     elif message.startswith("#USERS_IP#"):
                         users = message[len("#USERS_IP#"):].strip().split("\n")
                         if self.message_callback:
+                            database.parse_users_info(users)
                             self.update_user_list(users)
 
                     elif message.startswith("FILE:"):
@@ -112,7 +116,6 @@ class Client:
         for _ in range(timeout):
             try:
                 self.socket.connect((self.host, self.port))
-                utils.save_ip_address(self.host + " - Server")
                 self.authenticated = True
                 break
             except (socket.timeout, socket.error) as e:

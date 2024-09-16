@@ -1,23 +1,10 @@
 import json
 import os
 import socket
+import sqlite3
+
 import psutil
 from PIL import Image, ImageDraw, ImageFont
-
-def save_ip_address(ip_address, file_path='Config/ip_history.txt'):
-    try:
-        # Читаем существующие IP-адреса из файла
-        with open(file_path, 'r') as file:
-            existing_ips = file.read().splitlines()
-    except FileNotFoundError:
-        # Если файла еще нет, считаем, что существующих IP-адресов нет
-        existing_ips = []
-
-    # Проверяем, есть ли уже такой IP-адрес в файле
-    if ip_address not in existing_ips:
-        with open(file_path, 'a') as file:
-            file.write(ip_address + '\n')
-
 
 
 def save_nickname_settings(filename="settings.json"):
@@ -131,6 +118,10 @@ def save_room_settings(room_name, password, filename="settings.json"):
     # Обновляем данные
     data["room_name"] = room_name
     data["password"] = password
+    if password:
+        data["is_hidden_password_BT"] = False
+    else:
+        data["is_hidden_password_BT"] = True
 
     # Сохраняем обновлённые данные в файл
     with open(filename, "w") as file:
@@ -139,14 +130,14 @@ def save_room_settings(room_name, password, filename="settings.json"):
 def load_room_settings(filename="settings.json"):
     # Проверяем, существует ли файл
     if not os.path.exists(filename):
-        return None, None
+        return None, None, None
 
     # Читаем данные из файла
     with open(filename, "r") as file:
         data = json.load(file)
 
     # Возвращаем название комнаты, если оно существует
-    return data.get("room_name", ""), data.get("password", "")
+    return data.get("room_name", ""), data.get("password", ""), data.get("is_hidden_password_BT", "")
 
 
 def load_nickname_settings(filename="settings.json"):

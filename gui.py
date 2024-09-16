@@ -182,7 +182,7 @@ class ChatApplication:
         frame = tk.Frame(settings_window, bg='black')
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        default_room_name, default_password = utils.load_room_settings()
+        default_room_name, default_password, is_hidden = utils.load_room_settings()
 
         # Поле ввода имени комнаты
         tk.Label(frame, text="Room Name", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
@@ -207,14 +207,20 @@ class ChatApplication:
         password_var = tk.StringVar(value=default_password)
         password_entry = tk.Entry(frame, textvariable=password_var, show="*", bg='#333', fg='white', font=('Helvetica', 12))
         password_entry.grid(row=2, column=1, sticky='ew', pady=5)
-        password_entry.grid_remove()  # Скрываем поле для пароля по умолчанию
+
+        if is_hidden:
+            password_entry.grid_remove()  # Скрываем поле для пароля по умолчанию
 
         # Кнопка создания комнаты
         create_button = tk.Button(frame, text="Create Room", command=lambda: self.create_room_with_settings(settings_window, room_name_var, password_var, ip_var), bg='#333', fg='white', font=('Helvetica', 12))
         create_button.grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
 
+        settings_window.bind('<Return>', lambda e: self.create_room_with_settings(settings_window, room_name_var, password_var, ip_var))
+        settings_window.focus_force()
+
 
     def toggle_password_field(self, password_entry):
+
         if password_entry.winfo_ismapped():
             password_entry.grid_remove()
         else:
@@ -233,7 +239,6 @@ class ChatApplication:
         self.root.withdraw()
         # Запускаем сервер в отдельном потоке
         def start_server_thread():
-            #self.server = server.start_server("0.0.0.0", 36500, self.nickname)
             self.server = server.Server(selected_ip, 36500, room_name, self.nickname)
             self.server.start()
             self.server.set_room_password(password)
@@ -287,6 +292,7 @@ class ChatApplication:
         join_window.grid_rowconfigure(0, weight=1)
         join_window.grid_rowconfigure(1, weight=1)
         join_window.grid_rowconfigure(2, weight=1)
+        join_window.focus_force()
 
     def join_room(self, join_window, server_ip_var, password_var, join_button):
         server_ip = server_ip_var.get()

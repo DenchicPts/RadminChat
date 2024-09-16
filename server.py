@@ -34,21 +34,21 @@ class Server:
         while True:
             try:
                 client_socket, client_address = self.server_socket.accept()
-                print(f"###Accepted connection from {client_address}")
+                # print(f"SERVER Accepted connection from {client_address}")
                 self.addresses[client_socket] = client_address[0]
                 threading.Thread(target=self.handle_client, args=(client_socket,), daemon=True).start()
             except Exception as e:
-                print(f"###Error handling client: {e}")
+                print(f"SERVER Error handling client: {e}")
 
     def handle_client(self, client_socket):
         try:
             # Получаем первое сообщение от клиента (никнейм, название комнаты и пароль)
             welcome_message = client_socket.recv(BUFFER_SIZE).decode('utf-8')
-            print(welcome_message)
+            # print(welcome_message)
             if welcome_message:
                 parts = welcome_message.split('*')
                 if len(parts) < 2:
-                    print(f"###Invalid welcome message from {self.addresses[client_socket]}")
+                    print(f"SERVER Invalid welcome message from {self.addresses[client_socket]}")
                     client_socket.close()
                     return
 
@@ -58,29 +58,30 @@ class Server:
 
                 # Проверяем пароль
                 if self.room_password and self.room_password != password:
-                    print(f"###Invalid password from {self.addresses[client_socket]}")
+                    print(f"SERVER Invalid password from {self.addresses[client_socket]}")
                     client_socket.send("Invalid password".encode('utf-8'))
                     client_socket.close()
                     return
                 else:
-                    print(f"###Success connection from {self.addresses[client_socket]}")
+                    print(f"SERVER Success connection from {self.addresses[client_socket]}")
                     client_socket.send("#MESSAGE#Success connection".encode('utf-8'))
-                    time.sleep(0.15)
+                    time.sleep(0.20)
 
                 # Проверяем, не хост ли это (по IP)
                 if self.addresses[client_socket] in {self.host, "127.0.0.1"}:
                     self.room_name = client_room_name
 
-                print(f"###Room name: {self.room_name}, Password: {password}")
+                print(f"SERVER Room name: {self.room_name}, Password: {password}")
 
                 # Добавляем клиента в список
                 self.clients[client_socket] = nickname
-                print(f"###Welcome message from {self.addresses[client_socket]}: {welcome_message}")
+                # print(f"SERVER Welcome message from {self.addresses[client_socket]}: {welcome_message}")
 
                 # Отправляем клиенту название комнаты
                 client_socket.send(f"#ROOMNAME#{self.room_name}".encode('utf-8'))
-                utils.save_room_settings(self.room_name, self.room_password)
+                utils.save_room_settings(self.room_name, password)
                 time.sleep(0.25)
+
                 self.broadcast(f"#MESSAGE#Welcome to the chat, {nickname}!", client_socket)
                 self.update_user_list()
 

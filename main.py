@@ -2,10 +2,12 @@ import os
 import tkinter as tk
 import gui
 import utils
+import database
 
 
 def main():
     save_folder = "Config"
+    database.init_db()
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 

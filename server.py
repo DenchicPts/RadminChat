@@ -18,6 +18,7 @@ class Server:
         self.addresses = {}
         self.room_password = None
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.stop_event = threading.Event()
 
     def start(self):
         self.server_socket.bind((self.host, self.port))
@@ -29,9 +30,17 @@ class Server:
         asyncio.run(self.server_input_thread())
 
 
+    def stop(self):
+        self.stop_event.set()
+        self.server_socket.close()
+        print("Server is shutdown")
+        for client_socket in list(self.clients.keys()):
+            self.remove_client(client_socket)
+
+
     async def accept_connections(self):
         #loop = asyncio.get_running_loop()
-        while True:
+        while not self.stop_event.is_set():
             try:
                 client_socket, client_address = self.server_socket.accept()
                 # print(f"SERVER Accepted connection from {client_address}")
@@ -85,7 +94,7 @@ class Server:
                 self.broadcast(f"#MESSAGE#Welcome to the chat, {nickname}!", client_socket)
                 self.update_user_list()
 
-            while True:
+            while not self.stop_event.is_set():
                 gc.collect()
 
                 message = client_socket.recv(BUFFER_SIZE * 10000)
@@ -159,7 +168,7 @@ class Server:
         self.broadcast(f"#USERS_IP#\n" + "\n".join(user_list))
 
     async def server_input_thread(self):
-        while True:
+        while not self.stop_event.is_set():
             try:
                 message = input()
                 if message:

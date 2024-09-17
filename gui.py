@@ -29,6 +29,7 @@ class ChatApplication:
         self.tray_icon = None
         self.client = None
         self.server = None
+        self.is_hosted = False
 
         self.create_buttons_frame()
         self.message_area = None
@@ -42,6 +43,9 @@ class ChatApplication:
         button_frame = tk.Frame(self.root, bg='black')
         button_frame.pack(pady=50, fill=tk.X)
 
+        # Заблокировать изменение размера окна
+        self.root.resizable(False, False)
+
         button_style = {
             'font': ('Helvetica', 16),
             'bg': '#333',
@@ -54,9 +58,44 @@ class ChatApplication:
             'height': 2
         }
 
-        tk.Button(button_frame, text="Create Room", command=self.show_room_settings, **button_style).pack(pady=10)
+        tk.Button(button_frame, text="Create Room", command=lambda: (
+                                    messagebox.showerror("Error", "Комната уже создана") if self.is_hosted
+                                    else self.show_room_settings()),
+                                    **button_style).pack(pady=10)
+
         tk.Button(button_frame, text="Join Room", command=self.show_join_room_window, **button_style).pack(pady=10)
         tk.Button(button_frame, text="IP List", command=self.ip_list, **button_style).pack(pady=10)
+
+        # Фрейм для состояния сервера
+        status_frame = tk.Frame(self.root, bg='black')
+        status_frame.pack(side=tk.LEFT, anchor='sw', padx=10, pady=10)
+
+        # Кружок состояния сервера
+        self.server_status_circle = tk.Canvas(status_frame, width=20, height=20, bg='black', highlightthickness=0)
+        self.server_status_circle.pack(side=tk.LEFT)
+
+        # Текст состояния сервера
+        self.server_status_label = tk.Label(status_frame, text="Server is not started", fg='red', bg='black',
+                                            font=('Helvetica', 12))
+        self.server_status_label.pack(side=tk.LEFT)
+
+        # Текст IP-адреса
+        self.server_ip_label = tk.Label(status_frame, text="IP: N/A", fg='white', bg='black', font=('Helvetica', 12))
+        self.server_ip_label.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Изначально скрываем IP
+        self.server_ip_label.pack_forget()
+
+        # Используем place для кнопок, чтобы разместить их над состоянием сервера
+        return_button = tk.Button(self.root, text="Return", command=self.return_to_room, font=('Helvetica', 10),
+                                  bg='#333', fg='white', width=6, height=1, bd=0, relief=tk.FLAT)
+        return_button.place(x=35, y=435)  # Указываем точные координаты для размещения
+
+        close_server_button = tk.Button(self.root, text="Close", command=self.close_server, font=('Helvetica', 10),
+                                        bg='#333', fg='white', width=6, height=1, bd=0, relief=tk.FLAT)
+        close_server_button.place(x=95, y=435)  # Указываем координаты для размещения рядом с Return to Room
+        self.root.focus_force()
+
 
     def quit_window(self, icon, item):
         icon.stop()
@@ -79,6 +118,48 @@ class ChatApplication:
         icon = pystray.Icon("test", icon_image, "Radmin Chat", menu)
         threading.Thread(target=icon.run, daemon=True).start()
         return icon
+
+    # Метод для закрытия сервера
+    def close_server(self):
+        if self.server:
+            self.server.stop()  # Предполагаем, что у сервера есть метод stop
+            self.server = None
+            self.is_hosted = False
+            self.update_server_status()
+
+    def update_server_status(self):
+        if self.is_hosted:
+            # Зелёный кружок
+            self.server_status_circle.create_oval(5, 5, 15, 15, fill='green')
+            self.server_status_label.config(text="Server is running", fg='green')
+
+            # Отображаем IP, если сервер запущен
+            if self.server.host:
+
+                self.server_ip_label.config(text=f"IP: {self.server.host}")
+                self.server_ip_label.pack(side=tk.LEFT, padx=(10, 0))
+        else:
+            # Красный кружок
+            self.server_status_circle.create_oval(5, 5, 15, 15, fill='red')
+            self.server_status_label.config(text="Server is not started", fg='red')
+
+            # Скрываем IP, если сервер не запущен
+            self.server_ip_label.pack_forget()
+
+    def return_to_room(self):
+        if self.is_hosted:
+            # Подключаемся как клиент к только что созданной комнате
+            self.root.withdraw()
+            if not self.server.host == "0.0.0.0":
+                self.client = client.Client(self.server.host, 36500, self.nickname, self.server.room_name, self.server.room_password)
+            else:
+                self.client = client.Client("localhost", 36500, self.nickname, self.server.room_name, self.server.room_password)
+            self.is_hosted = True
+            self.client.connect()
+            self.create_chat_window(self.server.room_name, self.server.host)  # Передаем IP адрес для заголовка окна
+            self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change, self.receive_file)
+        else:
+            print("No active room")
 
 
     def create_chat_window(self, room_name, server_ip):
@@ -143,12 +224,18 @@ class ChatApplication:
         self.chat_window.grid_rowconfigure(0, weight=1)
         self.chat_window.grid_columnconfigure(0, weight=1)
         self.chat_window.grid_columnconfigure(1, weight=0)
+        self.chat_window.focus_force()
+        self.chat_window.protocol("WM_DELETE_WINDOW", self.on_chat_window_close)
 
-        self.chat_window.protocol("WM_DELETE_WINDOW", lambda: (
-            self.client.disconnect() if self.client else None,
-            self.root.deiconify(),
-            self.chat_window.destroy()
-        ))
+
+    def on_chat_window_close(self):
+        if self.client:
+            self.client.disconnect()  # Отключаем клиента, если он есть
+        self.root.deiconify()  # Показать главное окно
+        if self.server:
+            self.update_server_status()  # Обновляем статус сервера
+        self.chat_window.destroy()  # Закрыть окно чата
+
     def send_message(self, event=None):
         message = self.message_entry.get("1.0", tk.END).strip()
         if message:
@@ -239,17 +326,20 @@ class ChatApplication:
         self.root.withdraw()
         # Запускаем сервер в отдельном потоке
         def start_server_thread():
-            self.server = server.Server(selected_ip, 36500, room_name, self.nickname)
-            self.server.start()
-            self.server.set_room_password(password)
+            try:
+                self.server = server.Server(selected_ip, 36500, room_name, self.nickname)
+                self.server.start()
+                self.server.set_room_password(password)
+            except Exception as e:
+                print("Server shutted")
 
         threading.Thread(target=start_server_thread, daemon=True).start()
-
         # Подключаемся как клиент к только что созданной комнате
         if not selected_ip == "0.0.0.0":
             self.client = client.Client(selected_ip, 36500, self.nickname, room_name, password)
         else:
             self.client = client.Client("localhost", 36500, self.nickname, room_name, password)
+        self.is_hosted = True
         self.client.connect()
         self.create_chat_window(room_name, selected_ip)  # Передаем IP адрес для заголовка окна
         self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change, self.receive_file)

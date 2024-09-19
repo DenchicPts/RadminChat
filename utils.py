@@ -151,3 +151,12 @@ def load_nickname_settings(filename="settings.json"):
         data = json.load(file)
 
     return data.get("nickname", "")
+
+def file_exists(file_name, file_size):
+    # Путь к файлу в папке Save/HOST
+    file_path = os.path.join("Save", "HOST", file_name)
+    # Проверяем, существует ли файл и совпадает ли его размер
+    if os.path.exists(file_path):
+        existing_size = os.path.getsize(file_path)
+        return existing_size == file_size
+    return False

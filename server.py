@@ -27,7 +27,6 @@ class Server:
 
         # Запуск асинхронной функции accept_connections
         asyncio.run(self.accept_connections())
-        asyncio.run(self.server_input_thread())
 
 
     def stop(self):
@@ -91,12 +90,10 @@ class Server:
                 utils.save_room_settings(self.room_name, password)
                 time.sleep(0.25)
 
-                self.broadcast(f"#MESSAGE#Welcome to the chat, {nickname}!", client_socket)
+                client_socket.send(f"#MESSAGE#Welcome to the chat, {nickname}!".encode('utf-8'))
                 self.update_user_list()
 
             while not self.stop_event.is_set():
-                gc.collect()
-
                 message = client_socket.recv(BUFFER_SIZE * 10000)
                 try:
                     message = message.decode('utf-8')
@@ -116,11 +113,18 @@ class Server:
 
                     elif message.startswith("FILE:"):
                         parts = message.split(":")
-                        sender_nickname = parts[1]  # Получаем никнейм отправителя
+                        sender_nickname = parts[1]
                         file_name = parts[2]
                         file_size = int(parts[3])
-                        received_size = 0
-                        file_data = b""
+
+                        # Проверка, существует ли файл на сервере
+                        if utils.file_exists(file_name, file_size):
+                            # Отправляем сообщение клиенту, что файл уже существует
+                            client_socket.send(f"#FILE_EXISTS#{file_name}".encode('utf-8'))
+                        else:
+                            # Если файла нет, принимаем файл
+                            received_size = 0
+                            file_data = b""
 
                     elif message.startswith("#MESSAGE#"):
                         message_to_send = message[len("#MESSAGE#"):].strip()
@@ -167,15 +171,6 @@ class Server:
         user_list = [f"{nickname} - {ip}" for client_socket, nickname in self.clients.items() if (ip := self.addresses.get(client_socket))]
         self.broadcast(f"#USERS_IP#\n" + "\n".join(user_list))
 
-    async def server_input_thread(self):
-        while not self.stop_event.is_set():
-            try:
-                message = input()
-                if message:
-                    self.broadcast(f"{self.nickname}: {message}")
-            except KeyboardInterrupt:
-                print("\nServer shutting down.")
-                break
 
     def set_room_password(self, password):
         self.room_password = password

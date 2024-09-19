@@ -488,7 +488,7 @@ class ChatApplication:
                 messagebox.showerror("Connection Error", f"An error occurred: {str(e)}")
 
         # Запускаем попытку подключения в отдельном потоке, чтобы избежать зависания UI
-        threading.Thread(target=attempt_connection, daemon=True).start()
+        threading.Thread(target=attempt_connection, daemon=True, name="Attempt to connection").start()
 
     def chat_window_name_change(self):
         self.chat_window.title(f"{self.client.room_name} : {self.client.host}")
@@ -499,7 +499,8 @@ class ChatApplication:
 
         if file_path:
             # Сообщаем клиенту отправить файл на сервер
-            self.client.send_file(file_path)
+
+            threading.Thread(target=self.client.send_file, args=(file_path,)).start()
 
             # Отображаем сообщение в чате
             file_name = os.path.basename(file_path)

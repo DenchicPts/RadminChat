@@ -3,7 +3,6 @@ import threading
 import time
 import os
 import gc
-
 import database
 import utils
 import asyncio
@@ -16,11 +15,14 @@ class Client:
         self.room_name = room_name
         self.password = password
         self.socket = None
+        # GUI Function
         self.message_callback = None
         self.update_user_list = None
         self.window_name_change = None
         self.file_callback = None
+        # Boolean
         self.authenticated = False
+        self.stop_file_transfer = False
 
         print(host)
 
@@ -77,6 +79,14 @@ class Client:
                     elif message.startswith("#MESSAGE#"):
                         message_to_send = message[len("#MESSAGE#"):].strip()
                         self.message_callback(message_to_send)
+
+                    elif message.startswith("#FILE_EXISTS#"):
+                        # Сервер сообщил, что файл уже существует
+                        file_name = message[len("#FILE_EXISTS#"):].strip()
+                        print(f"Файл {file_name} уже существует на сервере. Передача отменена.")
+                        self.stop_file_transfer = True  # Устанавливаем флаг для остановки передачи
+
+
 
                 elif message and not decoded_message:
                     file_data += message
@@ -135,17 +145,14 @@ class Client:
 
     # Заготовка под большое количество файлов
     def send_file(self, file_path):
-        # Отправка файла в отдельном потоке
-        threading.Thread(target=self.send_file_thread, args=(file_path,), daemon=True).start()
-
+        self.send_file_thread(file_path)
 
 
     def send_file_thread(self, file_path):
         try:
             file_name = os.path.basename(file_path)
             file_size = os.path.getsize(file_path)
-            chunk_size = 1024 * 10000 # 10 MBait speed
-
+            chunk_size = 1024 * 10000  # 10 MB
 
             # Отправка заголовка с информацией о файле
             file_info_message = f"FILE:{self.nickname}:{file_name}:{file_size}"
@@ -156,19 +163,19 @@ class Client:
             with open(file_path, "rb") as f:
                 sent_size = 0
                 while sent_size < file_size:
-                    # Читаем кусок данных
+                    if self.stop_file_transfer:
+                        print(f"Передача файла {file_name} остановлена.")
+                        self.stop_file_transfer = False
+                        return  # Остановка передачи файла
+
                     chunk = f.read(chunk_size)
                     if not chunk:
                         break  # Если больше нечего читать, выходим из цикла
 
-                    # Отправляем чанк
                     self.socket.sendall(chunk)
                     sent_size += len(chunk)
-                    # Небольшая задержка, чтобы избежать забивки сокета
                     del chunk
                     time.sleep(0.01)
-
-            gc.collect()
 
             print(f"Файл {file_name} отправлен на сервер.")
         except Exception as e:

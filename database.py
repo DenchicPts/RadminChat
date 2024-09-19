@@ -25,16 +25,29 @@ def save_connection(is_server, ip, nickname_or_room):
     # Определяем тип (сервер или клиент)
     connection_type = 'Server' if is_server else 'Client'
 
-    # Проверяем, существует ли запись с таким же ником и IP
+    # Проверяем, существует ли запись с таким же IP
     cursor.execute('''
-        SELECT * FROM connections WHERE nickname_or_room = ? AND ip = ?
-    ''', (nickname_or_room, ip))
+        SELECT * FROM connections WHERE ip = ?
+    ''', (ip,))
 
     existing_entry = cursor.fetchone()
 
     if existing_entry:
-        ...
-        #print(f"Запись с ником {nickname_or_room} и IP {ip} уже существует.")
+        # Если это сервер и имя комнаты отличается, то обновляем имя
+        if is_server:
+            existing_nickname_or_room = existing_entry[2]  # предположим, что третье поле - nickname_or_room
+            if existing_nickname_or_room != nickname_or_room:
+                cursor.execute('''
+                    UPDATE connections SET nickname_or_room = ? WHERE ip = ?
+                ''', (nickname_or_room, ip))
+                conn.commit()
+                #print(f"Имя для IP {ip} обновлено с {existing_nickname_or_room} на {nickname_or_room}.")
+            else:
+                #print(f"Имя для IP {ip} уже соответствует {nickname_or_room}. Обновление не требуется.")
+                pass
+        else:
+            #print(f"Запись с IP {ip} уже существует.")
+            pass
     else:
         # Если записи нет, то добавляем новую
         cursor.execute('''

@@ -5,7 +5,6 @@ import os
 import gc
 import database
 import utils
-import asyncio
 
 class Client:
     def __init__(self, host, port, nickname, room_name="", password=""):
@@ -39,6 +38,7 @@ class Client:
         threading.Thread(target=self.listen_for_messages, daemon=True).start()
 
     def listen_for_messages(self):
+        file_accepted = False
         while True:
             try:
                 message = self.socket.recv(1024 * 10000)
@@ -73,8 +73,10 @@ class Client:
                         sender_nickname = parts[1]  # Получаем никнейм отправителя
                         file_name = parts[2]
                         file_size = int(parts[3])
+                        file_counts = int(parts[4])
                         received_size = 0
-                        file_data = b""
+                        file_accepted = True
+                        file_thread = None
 
                     elif message.startswith("#MESSAGE#"):
                         message_to_send = message[len("#MESSAGE#"):].strip()
@@ -89,11 +91,25 @@ class Client:
 
 
                 elif message and not decoded_message:
-                    file_data += message
+                    if file_thread:
+                        file_thread.join()
+                    file_thread = threading.Thread(target=utils.save_file_chunk, args=(file_name, message, self.host,), daemon=True)
+                    file_thread.start()
+
                     received_size += len(message)
-                    if received_size >= file_size:
-                        utils.file_save(file_name, file_data, self.host)
-                        del file_data, received_size
+
+                    if received_size >= file_size and file_accepted:
+                        if file_thread:
+                            file_thread.join()
+
+                        finalizing_file = threading.Thread(target=utils.finalize_file, args=(file_name, self.host,), daemon=True)
+                        finalizing_file.start()
+                        finalizing_file.join()
+                        file_accepted = False
+                        received_size = 0
+
+
+
                         file_path = f"Save\\{self.host}"
                         if self.file_callback:
                             self.file_callback(file_name, file_path, sender_nickname)
@@ -144,18 +160,24 @@ class Client:
 
 
     # Заготовка под большое количество файлов
-    def send_file(self, file_path):
-        self.send_file_thread(file_path)
+    def send_file(self, file_paths):
+        file_paths = list(file_paths)
+        for file_path in file_paths:
+            self.send_file_thread(file_path, len(file_paths))
+
+#       while file_paths:  Вариант отправки 2
+#           file_path = file_paths.pop(0)
+#           self.send_file_thread(file_path)
 
 
-    def send_file_thread(self, file_path):
+    def send_file_thread(self, file_path, file_counts):
         try:
             file_name = os.path.basename(file_path)
             file_size = os.path.getsize(file_path)
             chunk_size = 1024 * 10000  # 10 MB
 
             # Отправка заголовка с информацией о файле
-            file_info_message = f"FILE:{self.nickname}:{file_name}:{file_size}"
+            file_info_message = f"FILE:{self.nickname}:{file_name}:{file_size}:{file_counts}"
             self.socket.send(file_info_message.encode('utf-8'))
             time.sleep(0.1)
 
@@ -164,7 +186,7 @@ class Client:
                 sent_size = 0
                 while sent_size < file_size:
                     if self.stop_file_transfer:
-                        print(f"Передача файла {file_name} остановлена.")
+                        print(f"Передача файла {file_name} остановлена")
                         self.stop_file_transfer = False
                         return  # Остановка передачи файла
 
@@ -178,6 +200,7 @@ class Client:
                     time.sleep(0.01)
 
             print(f"Файл {file_name} отправлен на сервер.")
+            time.sleep(1.5) # В случае чего увеличить задержку(зависит от качества соединения)
         except Exception as e:
             print(f"Ошибка при отправке файла: {e}")
 

@@ -77,19 +77,6 @@ def get_ip_list():
         return []
 
 
-def file_save(file_name, file_data, folder_to_save="HOST"):
-    # Сохранение файла на сервере
-    save_folder = f"Save/{folder_to_save}"
-    if not os.path.exists(save_folder):
-        os.makedirs(save_folder)
-
-    file_path = os.path.join(save_folder, file_name)
-    with open(file_path, "wb") as f:
-        f.write(file_data)
-        f.close()
-        del file_data
-    print(f"Файл {file_name} получен и сохранён.")
-
 def get_available_ip_addresses():
     ip_addresses = []
 
@@ -160,3 +147,41 @@ def file_exists(file_name, file_size):
         existing_size = os.path.getsize(file_path)
         return existing_size == file_size
     return False
+
+def save_file_chunk(file_name, file_data, folder_to_save="HOST"):
+    # Создание папки, если её нет
+    save_folder = f"Save/{folder_to_save}"
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+
+    # Формируем временное имя файла с расширением .temp
+    temp_file_name = f"{file_name}.temp"
+    file_path = os.path.join(save_folder, temp_file_name)
+
+    # Открываем файл в режиме добавления бинарных данных
+    with open(file_path, "ab") as f:
+        f.write(file_data)  # Добавляем новую порцию данных
+
+def finalize_file(file_name, folder_to_save="HOST"):
+    # Переименование файла с .temp на исходное имя
+    save_folder = f"Save/{folder_to_save}"
+    temp_file_name = f"{file_name}.temp"
+    temp_file_path = os.path.join(save_folder, temp_file_name)
+    final_file_path = os.path.join(save_folder, file_name)
+
+    if os.path.exists(temp_file_path):
+    # Проверка, существует ли файл с таким именем и размерами
+        if os.path.exists(final_file_path):
+            temp_size = os.path.getsize(temp_file_path)
+            final_size = os.path.getsize(final_file_path)
+            if temp_size == final_size:
+                # Удаляем временный файл
+                os.remove(temp_file_path)
+                #print(f"Файл {final_file_path} уже существует с тем же размером. Временный файл {temp_file_name} удалён.")
+                return
+
+
+        os.rename(temp_file_path, final_file_path)
+        print(f"Файл {file_name} полностью получен")
+    else:
+        print(f"Ошибка: временный файл {temp_file_name} не найден.")

@@ -9,14 +9,14 @@ import asyncio
 BUFFER_SIZE = 1024
 
 class Server:
-    def __init__(self, host, port, room_name, nickname):
+    def __init__(self, host, port, room_name, nickname, password):
         self.host = host
         self.port = port
         self.room_name = room_name
         self.nickname = nickname
         self.clients = {}
         self.addresses = {}
-        self.room_password = None
+        self.room_password = password
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.stop_event = threading.Event()
 
@@ -93,8 +93,13 @@ class Server:
                 client_socket.send(f"#MESSAGE#Welcome to the chat, {nickname}!".encode('utf-8'))
                 self.update_user_list()
 
+            # Для работы с файлами
+            file_accepted = False
+            file_paths = None
+            #
             while not self.stop_event.is_set():
                 message = client_socket.recv(BUFFER_SIZE * 10000)
+
                 try:
                     message = message.decode('utf-8')
                     decoded_message = True
@@ -116,27 +121,48 @@ class Server:
                         sender_nickname = parts[1]
                         file_name = parts[2]
                         file_size = int(parts[3])
+                        file_counts = int(parts[4])
+                        file_accepted = True
+                        file_thread = None
+                        received_size = 0
+
+                        if file_paths:
+                            file_paths.append(file_name)
+                        else:
+                            file_paths = [file_name]
 
                         # Проверка, существует ли файл на сервере
                         if utils.file_exists(file_name, file_size):
                             # Отправляем сообщение клиенту, что файл уже существует
                             client_socket.send(f"#FILE_EXISTS#{file_name}".encode('utf-8'))
-                        else:
-                            # Если файла нет, принимаем файл
-                            received_size = 0
-                            file_data = b""
+                            if file_counts == len(file_paths):
+                                threading.Thread(target=self.send_files, args=(client_socket, file_paths, sender_nickname), daemon=True).start()
+
 
                     elif message.startswith("#MESSAGE#"):
                         message_to_send = message[len("#MESSAGE#"):].strip()
                         self.broadcast(f"#MESSAGE#{self.clients[client_socket]}: {message_to_send}", client_socket)
 
+
                 elif message and not decoded_message:
-                    file_data += message
+                    if file_thread:
+                        file_thread.join()
+                    file_thread = threading.Thread(target=utils.save_file_chunk, args=(file_name, message,), daemon=True)
+                    file_thread.start()
+
                     received_size += len(message)
-                    if received_size >= file_size:
-                        utils.file_save(file_name, file_data)
-                        threading.Thread(target=self.send_file, args=(client_socket, file_name, file_size, file_data, sender_nickname)).start()
-                        del file_data, received_size
+                    if received_size >= file_size and file_accepted:
+                        if file_thread:
+                            file_thread.join()
+
+                        finalizing_file = threading.Thread(target=utils.finalize_file, args=(file_name,), daemon=True)
+                        finalizing_file.start()
+                        finalizing_file.join()
+                        if file_counts == len(file_paths):
+                            threading.Thread(target=self.send_files, args=(client_socket, file_paths, sender_nickname), daemon=True).start()
+
+                        file_accepted = False
+                        received_size = 0
 
                 elif message:
                     del message
@@ -175,16 +201,38 @@ class Server:
     def set_room_password(self, password):
         self.room_password = password
 
-    def send_file(self, client_socket, file_name, file_size, file_data, nickname):
+
+    def send_files(self,client_socket, file_paths, nickname):
+        file_paths = list(file_paths)
+        for file_path in file_paths:
+            self.send_file_thread(client_socket, file_path, len(file_paths), nickname)
+
+    def send_file_thread(self, client_socket, file_name, file_counts, nickname):
         try:
+
+            chunk_size = 1024 * 10000  # 10 MB
+            file_path = f"Save/HOST/{file_name}"
+            file_size = os.path.getsize(file_path)
+
             # Пересылка файла другим клиентам
             for client in self.clients:
                 if not client == client_socket:
-                    client.send(f"FILE:{nickname}:{file_name}:{file_size}".encode('utf-8'))
-                    client.sendall(file_data)
+                    client.send(f"FILE:{nickname}:{file_name}:{file_size}:{file_counts}".encode('utf-8'))
 
-            del file_data
+                    # Отправляем файл чанками
+                    with open(file_path, "rb") as f:
+                        sent_size = 0
+                        while sent_size < file_size:
+                            chunk = f.read(chunk_size)
+                            if not chunk:
+                                break  # Если больше нечего читать, выходим из цикла
+
+                            client.sendall(chunk)
+                            sent_size += len(chunk)
+                            del chunk
+                            time.sleep(0.01)
+
+            time.sleep(1.5) # В случае чего увеличить задержку(зависит от качества соединения)
             gc.collect()
-
         except Exception as e:
             print(f"Ошибка при получении файла: {e}")

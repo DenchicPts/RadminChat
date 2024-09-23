@@ -327,9 +327,8 @@ class ChatApplication:
         # Запускаем сервер в отдельном потоке
         def start_server_thread():
             try:
-                self.server = server.Server(selected_ip, 36500, room_name, self.nickname)
+                self.server = server.Server(selected_ip, 36500, room_name, self.nickname, password)
                 self.server.start()
-                self.server.set_room_password(password)
             except Exception as e:
                 print("Server shutted")
 
@@ -495,18 +494,17 @@ class ChatApplication:
 
     def attach_file(self):
         # Открытие диалогового окна для выбора файла
-        file_path = filedialog.askopenfilename()
+        file_paths = filedialog.askopenfilenames()
 
-        if file_path:
+        if file_paths:
             # Сообщаем клиенту отправить файл на сервер
-
-            threading.Thread(target=self.client.send_file, args=(file_path,)).start()
+            threading.Thread(target=self.client.send_file, args=(file_paths,)).start()
 
             # Отображаем сообщение в чате
-            file_name = os.path.basename(file_path)
-            self.message_area.config(state=tk.NORMAL)
-            self.message_area.insert(tk.END, f"Вы отправили файл: {file_name}\n")
-            self.message_area.config(state=tk.DISABLED)
+            #file_name = os.path.basename(file_path)
+            #self.message_area.config(state=tk.NORMAL)
+            #self.message_area.insert(tk.END, f"Вы отправили файл: {file_name}\n")
+            #self.message_area.config(state=tk.DISABLED)
 
     def record_audio(self):
         # Логика для записи аудио

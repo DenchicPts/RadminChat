@@ -96,6 +96,7 @@ class Server:
             # Для работы с файлами
             file_accepted = False
             file_paths = None
+            is_txt_file = False
             #
             while not self.stop_event.is_set():
                 message = client_socket.recv(BUFFER_SIZE * 10000)
@@ -106,7 +107,7 @@ class Server:
                 except UnicodeDecodeError:
                     decoded_message = False
 
-                if message and decoded_message:
+                if message and decoded_message and not is_txt_file:
                     print(f"SERVER Received message from {self.addresses[client_socket]}: {message}")
                     if message.startswith("#CHANGEROOMNAME#") and self.addresses[client_socket] in {self.host, "127.0.0.1"}:
                         new_name = message[len("#CHANGEROOMNAME#"):].strip()
@@ -126,6 +127,9 @@ class Server:
                         file_thread = None
                         received_size = 0
 
+                        if file_name.lower().endswith(".txt"):
+                            is_txt_file = True
+
                         if file_paths:
                             file_paths.append(file_name)
                         else:
@@ -135,8 +139,11 @@ class Server:
                         if utils.file_exists(file_name, file_size):
                             # Отправляем сообщение клиенту, что файл уже существует
                             client_socket.send(f"#FILE_EXISTS#{file_name}".encode('utf-8'))
+                            print(f" FILE COUNTS {file_counts} FILE PATHS {file_paths}")
                             if file_counts == len(file_paths):
                                 threading.Thread(target=self.send_files, args=(client_socket, file_paths, sender_nickname), daemon=True).start()
+                                file_paths = None
+
 
 
                     elif message.startswith("#MESSAGE#"):
@@ -144,24 +151,33 @@ class Server:
                         self.broadcast(f"#MESSAGE#{self.clients[client_socket]}: {message_to_send}", client_socket)
 
 
-                elif message and not decoded_message:
+                elif message and not decoded_message or is_txt_file:
                     if file_thread:
                         file_thread.join()
-                    file_thread = threading.Thread(target=utils.save_file_chunk, args=(file_name, message,), daemon=True)
-                    file_thread.start()
+
+                    if not is_txt_file:
+                        file_thread = threading.Thread(target=utils.save_file_chunk, args=(file_name, message,), daemon=True)
+                        file_thread.start()
+                    else:
+                        utils.receive_file_txt(message, file_name)
 
                     received_size += len(message)
                     if received_size >= file_size and file_accepted:
                         if file_thread:
                             file_thread.join()
 
-                        finalizing_file = threading.Thread(target=utils.finalize_file, args=(file_name,), daemon=True)
-                        finalizing_file.start()
-                        finalizing_file.join()
+                        if not is_txt_file:
+                            finalizing_file = threading.Thread(target=utils.finalize_file, args=(file_name,), daemon=True)
+                            finalizing_file.start()
+                            finalizing_file.join()
+
                         if file_counts == len(file_paths):
                             threading.Thread(target=self.send_files, args=(client_socket, file_paths, sender_nickname), daemon=True).start()
+                            file_paths = None
+
 
                         file_accepted = False
+                        is_txt_file = False
                         received_size = 0
 
                 elif message:
@@ -216,7 +232,7 @@ class Server:
 
             # Пересылка файла другим клиентам
             for client in self.clients:
-                if not client == client_socket:
+                if client == client_socket:
                     client.send(f"FILE:{nickname}:{file_name}:{file_size}:{file_counts}".encode('utf-8'))
 
                     # Отправляем файл чанками

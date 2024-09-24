@@ -185,3 +185,16 @@ def finalize_file(file_name, folder_to_save="HOST"):
         print(f"Файл {file_name} полностью получен")
     else:
         print(f"Ошибка: временный файл {temp_file_name} не найден.")
+
+def receive_file_txt(file_data, file_name, folder_to_save="HOST"):
+    # Запись данных в файл в режиме добавления (append)
+    save_folder = f"Save/{folder_to_save}"
+    os.makedirs(save_folder, exist_ok=True)
+
+    file_path = os.path.join(save_folder, file_name)
+    print(file_data)
+    with open(file_path, 'a', encoding='utf-8') as file:
+        for line in file_data.splitlines():
+            file.write(line + '\n')
+    print(f"Файл {file_name} сохранён")
+

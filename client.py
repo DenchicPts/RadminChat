@@ -39,6 +39,7 @@ class Client:
 
     def listen_for_messages(self):
         file_accepted = False
+        is_txt_file = False
         while True:
             try:
                 message = self.socket.recv(1024 * 10000)
@@ -49,7 +50,7 @@ class Client:
                     decoded_message = False
 
 
-                if message and decoded_message:
+                if message and decoded_message and not is_txt_file:
                     print(f"CLIENT Received {message}")
                     if "Invalid password" in message:
                         print("Invalid password")
@@ -78,6 +79,9 @@ class Client:
                         file_accepted = True
                         file_thread = None
 
+                        if file_name.lower().endswith(".txt"):
+                            is_txt_file = True
+
                     elif message.startswith("#MESSAGE#"):
                         message_to_send = message[len("#MESSAGE#"):].strip()
                         self.message_callback(message_to_send)
@@ -90,11 +94,15 @@ class Client:
 
 
 
-                elif message and not decoded_message:
+                elif message and not decoded_message or is_txt_file:
                     if file_thread:
                         file_thread.join()
-                    file_thread = threading.Thread(target=utils.save_file_chunk, args=(file_name, message, self.host,), daemon=True)
-                    file_thread.start()
+
+                    if not is_txt_file:
+                        file_thread = threading.Thread(target=utils.save_file_chunk, args=(file_name, message, self.host,), daemon=True)
+                        file_thread.start()
+                    else:
+                        utils.receive_file_txt(message, file_name, self.host)
 
                     received_size += len(message)
 
@@ -102,9 +110,12 @@ class Client:
                         if file_thread:
                             file_thread.join()
 
-                        finalizing_file = threading.Thread(target=utils.finalize_file, args=(file_name, self.host,), daemon=True)
-                        finalizing_file.start()
-                        finalizing_file.join()
+                        if not is_txt_file:
+                            finalizing_file = threading.Thread(target=utils.finalize_file, args=(file_name, self.host,), daemon=True)
+                            finalizing_file.start()
+                            finalizing_file.join()
+
+                        is_txt_file = False
                         file_accepted = False
                         received_size = 0
 

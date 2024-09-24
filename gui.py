@@ -216,7 +216,7 @@ class ChatApplication:
         self.smile_button.image = smile_icon_tk  # Сохраняем ссылку на изображение
         self.smile_button.pack(side=tk.LEFT, padx=(5, 5))
 
-        self.save_button = tk.Button(input_frame, image=save_icon_tk, command=self.save_chat, bg='black', borderwidth=0, highlightthickness=0)
+        self.save_button = tk.Button(input_frame, image=save_icon_tk, command=lambda: self.save_chat(server_ip), bg='black', borderwidth=0, highlightthickness=0)
         self.save_button.image = save_icon_tk  # Сохраняем ссылку на изображение
         self.save_button.pack(side=tk.LEFT, padx=(5, 0))
 
@@ -514,9 +514,30 @@ class ChatApplication:
         # Логика для открытия меню эмодзи
         print("Emoji menu clicked!")
 
-    def save_chat(self):
-        # Логика для сохранения чата
-        print("Save chat clicked!")
+    def save_chat(self, server_ip):
+        save_folder = "Save"
+        file_path = os.path.join(save_folder, f"{server_ip}.txt")
+
+        # Создание папки, если она не существует
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
+
+        # Получение всех сообщений из чата
+        messages = self.message_area.get("1.0", tk.END).strip()
+
+        # Обработка строк, чтобы добавить приписку "(Файл)", если сообщение содержит ссылку на файл
+        processed_messages = []
+        for line in messages.split("\n"):
+            if "Вы отправили файл:" in line or "получен и сохранён." in line:
+                processed_messages.append(f"{line} (Файл)")
+            else:
+                processed_messages.append(line)
+
+        # Сохранение всех сообщений в файл
+        with open(file_path, "w", encoding="utf-8") as file:
+            file.write("\n".join(processed_messages))
+
+        print(f"Чат сохранён в файл: {file_path}")
 
     def receive_file(self, file_name, file_path, sender_nickname):
         # Отображаем информацию о получении файла в чате

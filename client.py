@@ -79,7 +79,7 @@ class Client:
                         file_accepted = True
                         file_thread = None
 
-                        if file_name.lower().endswith(".txt"):
+                        if file_name.lower().endswith(".txt") or file_name.lower().endswith(".java"):
                             is_txt_file = True
 
                     elif message.startswith("#MESSAGE#"):
@@ -173,6 +173,7 @@ class Client:
     # Заготовка под большое количество файлов
     def send_file(self, file_paths):
         file_paths = list(file_paths)
+
         for file_path in file_paths:
             self.send_file_thread(file_path, len(file_paths))
 

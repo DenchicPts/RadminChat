@@ -127,7 +127,7 @@ class Server:
                         file_thread = None
                         received_size = 0
 
-                        if file_name.lower().endswith(".txt"):
+                        if file_name.lower().endswith(".txt") or file_name.lower().endswith(".java"):
                             is_txt_file = True
 
                         if file_paths:
@@ -212,10 +212,6 @@ class Server:
     def update_user_list(self):
         user_list = [f"{nickname} - {ip}" for client_socket, nickname in self.clients.items() if (ip := self.addresses.get(client_socket))]
         self.broadcast(f"#USERS_IP#\n" + "\n".join(user_list))
-
-
-    def set_room_password(self, password):
-        self.room_password = password
 
 
     def send_files(self,client_socket, file_paths, nickname):

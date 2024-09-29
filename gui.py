@@ -10,9 +10,18 @@ import client
 import server
 import os
 from PIL import Image, ImageTk
+
+import voice
 from utils import get_ip_list
 
 PORT = 36500
+
+def threaded(func):
+    """Декоратор для выполнения функции в отдельном потоке"""
+    def wrapper(*args, **kwargs):
+        thread = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+        thread.start()
+    return wrapper
 
 class ChatApplication:
     def __init__(self, root, nickname):
@@ -207,10 +216,18 @@ class ChatApplication:
         self.message_entry.bind('<Return>', self.send_message)
         self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, ''))
 
+        self.VoiceRecorder = voice.VoiceRecorder()
+
         # Создание кнопок для микрофона, смайлика и сохранения чата с прозрачным фоном
-        self.mic_button = tk.Button(input_frame, image=mic_icon_tk, command=self.record_audio, bg='black', borderwidth=0, highlightthickness=0)
+        self.mic_button = tk.Button(input_frame, image=mic_icon_tk, bg='black', borderwidth=0, highlightthickness=0)
         self.mic_button.image = mic_icon_tk  # Сохраняем ссылку на изображение
         self.mic_button.pack(side=tk.LEFT, padx=(5, 5))
+
+        # Привязываем событие нажатия (начало записи)
+        self.mic_button.bind('<ButtonPress-1>', self.start_recording)
+        # Привязываем событие отпускания (окончание записи)
+        self.mic_button.bind('<ButtonRelease-1>', self.stop_recording)
+
 
         self.smile_button = tk.Button(input_frame, image=smile_icon_tk, command=self.open_emoji_menu, bg='black', borderwidth=0, highlightthickness=0)
         self.smile_button.image = smile_icon_tk  # Сохраняем ссылку на изображение
@@ -591,3 +608,23 @@ class ChatApplication:
                 messagebox.showerror("Ошибка", "Операционная система не поддерживается")
         else:
             messagebox.showerror("Ошибка", f"Папка не найдена: {folder_path}")
+
+
+    def start_recording(self, event):
+        self.VoiceRecorder.start_recording()
+
+    @threaded
+    def stop_recording(self, event):
+        recording_stop = threading.Thread(target=self.VoiceRecorder.stop_recording, daemon=True)
+        recording_stop.start()
+        recording_stop.join()
+        # Логика отправки файла на сервер после записи
+        self.send_voice_message(self.VoiceRecorder.output_file)
+
+    def send_voice_message(self, file_path):
+        print(f"Отправка голосового сообщения {file_path}")
+
+        file_path = [file_path]
+        threading.Thread(target=self.client.send_file, args=(file_path,), daemon=True).start()
+
+

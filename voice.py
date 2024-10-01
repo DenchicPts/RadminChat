@@ -1,9 +1,13 @@
 import datetime
 import os
 import threading
-
+import time
+import tkinter as tk
+import customtkinter as ctk
+import pygame
 import sounddevice as sd
 import soundfile as sf
+from utils import threaded
 
 class VoiceRecorder:
     def __init__(self, output_file=None, device_index=None):
@@ -60,3 +64,127 @@ class VoiceRecorder:
             if device_info['max_input_channels'] > 0:
                 microphones.append((i, device_info['name']))
         return microphones
+
+class AudioMessageWidget(ctk.CTkFrame):
+    def __init__(self, parent, audio_file, duration, size, **kwargs):
+        super().__init__(parent, **kwargs)
+
+        # Инстанцируем аудиоплеер
+        self.audio_player = AudioPlayer()
+        self.audio_file = audio_file
+        self.duration = duration
+        self.size = size
+        self.current_time = 0
+
+        # Загружаем аудиофайл
+        self.audio_player.load_audio(audio_file)
+
+        self.configure(corner_radius=15, fg_color="#333")
+        self.inner_frame = ctk.CTkFrame(self, fg_color="#333", corner_radius=15)
+        self.inner_frame.pack(padx=5, pady=5, fill=tk.X)
+
+        # Кнопка воспроизведения (делаем круглой)
+        self.play_button = ctk.CTkButton(
+            self.inner_frame, text="▶", command=self.toggle_play,
+            fg_color="#444", text_color="white", hover_color="#555",
+            width=40, height=40, corner_radius=20  # Круглая форма
+        )
+        self.play_button.grid(row=0, column=0, padx=5, pady=5, sticky="ns")  # Центрируем по вертикали
+
+        self.waveform = ctk.CTkLabel(self.inner_frame, text="=== Waveform ===", text_color='white', fg_color='#333')
+        self.waveform.grid(row=0, column=1, columnspan=2)
+
+        self.time_label = ctk.CTkLabel(self.inner_frame, text="00:00 / " + self.format_time(self.duration), text_color='white', fg_color='#333')
+        self.time_label.grid(row=1, column=1, pady=5)
+
+        # Размер файла
+        self.size_label = ctk.CTkLabel(self.inner_frame, text=f"{size} KB", text_color='white', fg_color='#333')
+        self.size_label.grid(row=1, column=2, padx=5, sticky="e")
+
+        self.timer_id = None
+
+    @threaded
+    def toggle_play(self):
+        """Функция для управления воспроизведением аудио."""
+        if not self.audio_player.is_playing and not self.audio_player.is_paused:
+            # Запускаем воспроизведение
+            self.audio_player.play_audio(self.on_audio_complete)
+            self.play_button.configure(text="⏸")
+            self.update_time()
+        elif self.audio_player.is_paused:
+            # Возобновляем воспроизведение с текущей позиции
+            self.audio_player.play_audio(self.on_audio_complete)
+            self.play_button.configure(text="⏸")
+            self.update_time()
+        else:
+            # Ставим на паузу
+            self.audio_player.pause_audio()
+            self.play_button.configure(text="▶")
+
+    @threaded
+    def update_time(self):
+        """Обновляем отображение текущего времени аудио."""
+        while self.audio_player.is_playing:
+            self.current_time = pygame.mixer.music.get_pos() // 1000  # Получаем текущее время в секундах
+            self.time_label.configure(text=f"{self.format_time(self.current_time)} / {self.format_time(self.duration)}")
+            time.sleep(1)
+
+    def format_time(self, seconds):
+        """Форматируем время в минуты и секунды."""
+        mins = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{mins:02}:{secs:02}"
+
+    def on_audio_complete(self):
+        """Вызывается, когда аудио заканчивается."""
+        self.play_button.configure(text="▶")  # Сбрасываем кнопку в начальное состояние
+        self.current_time = 0
+        self.time_label.configure(text=f"{self.format_time(self.current_time)} / {self.format_time(self.duration)}")
+        self.audio_player.stop_audio()  # Останавливаем воспроизведение
+
+
+
+class AudioPlayer:
+    def __init__(self):
+        pygame.mixer.init()  # Инициализация микшера Pygame
+        self.is_playing = False
+        self.is_paused = False
+        self.audio_file = None
+
+    def load_audio(self, file_path):
+        """Загружаем аудиофайл в Pygame."""
+        self.audio_file = file_path
+        pygame.mixer.music.load(self.audio_file)
+
+    def play_audio(self, on_complete_callback):
+        """Запуск или возобновление воспроизведения с сохраненной позиции."""
+        if not self.is_playing and not self.is_paused:
+            # Начинаем воспроизведение сначала
+            pygame.mixer.music.play()
+            self.is_playing = True
+            # Запускаем проверку завершения аудио в отдельном потоке
+            threading.Thread(target=self._check_audio_complete, args=(on_complete_callback,)).start()
+        elif self.is_paused:
+            # Возобновляем воспроизведение с паузы
+            pygame.mixer.music.unpause()
+            self.is_playing = True
+            self.is_paused = False
+
+    def pause_audio(self):
+        """Ставим на паузу."""
+        if self.is_playing:
+            pygame.mixer.music.pause()
+            self.is_paused = True
+            self.is_playing = False
+
+    def stop_audio(self):
+        """Останавливаем аудио."""
+        pygame.mixer.music.stop()
+        self.is_paused = False
+        self.is_playing = False
+
+    def _check_audio_complete(self, on_complete_callback):
+        """Проверка завершения аудио для вызова коллбэка."""
+        while pygame.mixer.music.get_busy() or self.is_paused:
+            time.sleep(0.1)
+        on_complete_callback()  # Аудио завершено, вызываем коллбэк

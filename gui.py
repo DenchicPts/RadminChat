@@ -10,18 +10,12 @@ import client
 import server
 import os
 from PIL import Image, ImageTk
+import soundfile as sf
 
 import voice
-from utils import get_ip_list
+from utils import get_ip_list, threaded
 
 PORT = 36500
-
-def threaded(func):
-    """Декоратор для выполнения функции в отдельном потоке"""
-    def wrapper(*args, **kwargs):
-        thread = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
-        thread.start()
-    return wrapper
 
 class ChatApplication:
     def __init__(self, root, nickname):
@@ -44,6 +38,8 @@ class ChatApplication:
         self.message_area = None
         self.user_listbox = None
         self.user_list = []
+
+        self.audio_player = voice.AudioPlayer()
 
         self.chat_window = None
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
@@ -523,9 +519,6 @@ class ChatApplication:
             #self.message_area.insert(tk.END, f"Вы отправили файл: {file_name}\n")
             #self.message_area.config(state=tk.DISABLED)
 
-    def record_audio(self):
-        # Логика для записи аудио
-        print("Record audio clicked!")
 
     def open_emoji_menu(self):
         # Логика для открытия меню эмодзи
@@ -564,6 +557,8 @@ class ChatApplication:
             # Если это изображение, отображаем его в чате
             #self.message_area.insert(tk.END, f"Получено изображение: {file_name}\n")
             self.display_image_in_chat(file_path + f"\\{file_name}")
+        elif file_name.lower().endswith(".ogg"):
+            self.add_audio_message(file_path + f"\\{file_name}")
         else:
             # Создаём выделенный текст с файлом как ссылкой
             self.message_area.insert(tk.END, f"{sender_nickname}: ", "normal")
@@ -620,11 +615,39 @@ class ChatApplication:
         recording_stop.join()
         # Логика отправки файла на сервер после записи
         self.send_voice_message(self.VoiceRecorder.output_file)
+        self.add_audio_message(self.VoiceRecorder.output_file)
 
     def send_voice_message(self, file_path):
         print(f"Отправка голосового сообщения {file_path}")
-
         file_path = [file_path]
         threading.Thread(target=self.client.send_file, args=(file_path,), daemon=True).start()
 
+    def add_audio_message(self, audio_file):
+        """Функция для добавления аудиосообщения в чат."""
 
+        # Получаем размер файла в килобайтах
+        file_size_kb = round(os.path.getsize(audio_file) / 1024, 2)  # Преобразуем байты в килобайты
+
+        # Определяем длительность аудиофайла
+        with sf.SoundFile(audio_file) as audio:
+            frames = len(audio)
+            sample_rate = audio.samplerate
+            duration_seconds = frames / sample_rate  # Длительность в секундах
+        print(duration_seconds)
+        # Включаем возможность редактирования
+        self.message_area.config(state=tk.NORMAL)
+
+        # Добавляем аудиосообщение в конец чата
+        self.message_area.insert(tk.END, "\n")
+
+        # Создаем Frame для аудиосообщения
+        audio_message_frame = tk.Frame(self.message_area, bg='black')
+        self.message_area.window_create(tk.END, window=audio_message_frame)
+
+        # Создаем виджет аудиосообщения
+        audio_widget = voice.AudioMessageWidget(audio_message_frame, audio_file, duration_seconds, file_size_kb)
+        audio_widget.pack(fill=tk.X)
+
+        # Отключаем возможность редактирования
+        self.message_area.config(state=tk.DISABLED)
+        self.message_area.yview(tk.END)

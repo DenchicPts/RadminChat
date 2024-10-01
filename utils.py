@@ -2,6 +2,7 @@ import json
 import os
 import socket
 import sqlite3
+import threading
 
 import psutil
 from PIL import Image, ImageDraw, ImageFont
@@ -198,3 +199,10 @@ def receive_file_txt(file_data, file_name, folder_to_save="HOST"):
             file.write(line + '\n')
     print(f"Файл {file_name} сохранён")
 
+
+def threaded(func):
+    """Декоратор для выполнения функции в отдельном потоке"""
+    def wrapper(*args, **kwargs):
+        thread = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+        thread.start()
+    return wrapper

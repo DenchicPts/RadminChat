@@ -228,7 +228,7 @@ class Server:
 
             # Пересылка файла другим клиентам
             for client in self.clients:
-                if client == client_socket:
+                if not client == client_socket:
                     client.send(f"FILE:{nickname}:{file_name}:{file_size}:{file_counts}".encode('utf-8'))
 
                     # Отправляем файл чанками

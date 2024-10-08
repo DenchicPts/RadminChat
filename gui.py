@@ -38,8 +38,8 @@ class ChatApplication:
         self.message_area = None
         self.user_listbox = None
         self.user_list = []
+        self.active_audio_widget = None
 
-        self.audio_player = voice.AudioPlayer()
 
         self.chat_window = None
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
@@ -645,7 +645,7 @@ class ChatApplication:
         self.message_area.window_create(tk.END, window=audio_message_frame)
 
         # Создаем виджет аудиосообщения
-        audio_widget = voice.AudioMessageWidget(audio_message_frame, audio_file, duration_seconds, file_size_kb)
+        audio_widget = voice.AudioMessageWidget(audio_message_frame, audio_file, duration_seconds, file_size_kb, self)
         audio_widget.pack(fill=tk.X)
 
         # Отключаем возможность редактирования

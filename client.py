@@ -42,6 +42,7 @@ class Client:
         is_txt_file = False
         while True:
             try:
+
                 message = self.socket.recv(1024 * 10000)
                 try:
                     message = message.decode('utf-8')

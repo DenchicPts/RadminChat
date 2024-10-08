@@ -99,6 +99,7 @@ class Server:
             is_txt_file = False
             #
             while not self.stop_event.is_set():
+                print(f"Столько потоков задействовано :{threading.active_count()}")
                 message = client_socket.recv(BUFFER_SIZE * 10000)
 
                 try:

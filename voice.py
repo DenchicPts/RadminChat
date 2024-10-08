@@ -66,7 +66,7 @@ class VoiceRecorder:
         return microphones
 
 class AudioMessageWidget(ctk.CTkFrame):
-    def __init__(self, parent, audio_file, duration, size, **kwargs):
+    def __init__(self, parent, audio_file, duration, size, chat_app, **kwargs):
         super().__init__(parent, **kwargs)
 
         # Инстанцируем аудиоплеер
@@ -75,6 +75,7 @@ class AudioMessageWidget(ctk.CTkFrame):
         self.duration = duration
         self.size = size
         self.current_time = 0
+        self.chat_app = chat_app
 
         # Загружаем аудиофайл
         self.audio_player.load_audio(audio_file)
@@ -105,21 +106,42 @@ class AudioMessageWidget(ctk.CTkFrame):
 
     @threaded
     def toggle_play(self):
-        """Функция для управления воспроизведением аудио."""
-        if not self.audio_player.is_playing and not self.audio_player.is_paused:
+        # Проверяем, если уже есть активный виджет аудио и это не текущий виджет
+        if self.chat_app.active_audio_widget and self.chat_app.active_audio_widget != self:
+            # Останавливаем предыдущий активный аудио виджет
+            self.chat_app.active_audio_widget.stop_audio()
+
+        if not self.audio_player.is_playing and not self.audio_player.is_paused and self.play_button.cget("text") == "▶":
             # Запускаем воспроизведение
+            self.audio_player.load_audio(self.audio_file)
             self.audio_player.play_audio(self.on_audio_complete)
             self.play_button.configure(text="⏸")
             self.update_time()
+
+            # Устанавливаем текущий виджет как активный
+            self.chat_app.active_audio_widget = self
+
         elif self.audio_player.is_paused:
             # Возобновляем воспроизведение с текущей позиции
             self.audio_player.play_audio(self.on_audio_complete)
             self.play_button.configure(text="⏸")
             self.update_time()
+
+            # Устанавливаем текущий виджет как активный
+            self.chat_app.active_audio_widget = self
+
         else:
             # Ставим на паузу
             self.audio_player.pause_audio()
             self.play_button.configure(text="▶")
+
+
+    def stop_audio(self):
+        """Функция для остановки аудио и сброса состояния."""
+        self.audio_player.stop_audio()
+        self.play_button.configure(text="▶")
+        self.current_time = 0
+        self.time_label.configure(text=f"{self.format_time(self.current_time)} / {self.format_time(self.duration)}")
 
     @threaded
     def update_time(self):

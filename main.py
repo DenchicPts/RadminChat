@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import tkinter as tk
 import gui
@@ -22,4 +23,5 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support() # Необходимая фигня для того чтобы создание новых процессов было бы возможным
     main()

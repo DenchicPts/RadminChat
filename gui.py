@@ -7,10 +7,10 @@ from pystray import MenuItem as item
 import threading
 import utils
 import client
-import server
 import os
 from PIL import Image, ImageTk
 import soundfile as sf
+from multiprocessing import Process
 
 import voice
 from utils import get_ip_list, threaded
@@ -31,8 +31,12 @@ class ChatApplication:
 
         self.tray_icon = None
         self.client = None
-        self.server = None
+        self.server_process = None
         self.is_hosted = False
+        self.server_room_name = None
+        self.server_password = None
+        self.server_selected_ip = None
+
 
         self.create_buttons_frame()
         self.message_area = None
@@ -126,9 +130,9 @@ class ChatApplication:
 
     # Метод для закрытия сервера
     def close_server(self):
-        if self.server:
-            self.server.stop()  # Предполагаем, что у сервера есть метод stop
-            self.server = None
+        if self.server_process:
+            self.server_process.terminate()  # Завершает процесс
+            self.server_process.join()
             self.is_hosted = False
             self.update_server_status()
 
@@ -139,9 +143,9 @@ class ChatApplication:
             self.server_status_label.config(text="Server is running", fg='green')
 
             # Отображаем IP, если сервер запущен
-            if self.server.host:
+            if self.is_hosted:
 
-                self.server_ip_label.config(text=f"IP: {self.server.host}")
+                self.server_ip_label.config(text=f"IP: {self.server_selected_ip}")
                 self.server_ip_label.pack(side=tk.LEFT, padx=(10, 0))
         else:
             # Красный кружок
@@ -155,13 +159,13 @@ class ChatApplication:
         if self.is_hosted:
             # Подключаемся как клиент к только что созданной комнате
             self.root.withdraw()
-            if not self.server.host == "0.0.0.0":
-                self.client = client.Client(self.server.host, 36500, self.nickname, self.server.room_name, self.server.room_password)
+            if not self.server_selected_ip == "0.0.0.0":
+                self.client = client.Client(self.server_selected_ip, 36500, self.nickname, self.server_room_name, self.server_password)
             else:
-                self.client = client.Client("localhost", 36500, self.nickname, self.server.room_name, self.server.room_password)
+                self.client = client.Client("localhost", 36500, self.nickname, self.server_room_name, self.server_password)
             self.is_hosted = True
             self.client.connect()
-            self.create_chat_window(self.server.room_name, self.server.host)  # Передаем IP адрес для заголовка окна
+            self.create_chat_window(self.server_room_name, self.server_selected_ip)  # Передаем IP адрес для заголовка окна
             self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change, self.receive_file)
         else:
             print("No active room")
@@ -245,7 +249,7 @@ class ChatApplication:
         if self.client:
             self.client.disconnect()  # Отключаем клиента, если он есть
         self.root.deiconify()  # Показать главное окно
-        if self.server:
+        if self.is_hosted:
             self.update_server_status()  # Обновляем статус сервера
         self.chat_window.destroy()  # Закрыть окно чата
 
@@ -327,33 +331,30 @@ class ChatApplication:
             password_entry.grid()
 
     def create_room_with_settings(self, settings_window, room_name_var, password_var, ip_var):
-        room_name = room_name_var.get()
-        password = password_var.get()
-        selected_ip = ip_var.get()
-        if not room_name:
+        self.server_room_name = room_name_var.get()
+        self.server_password = password_var.get()
+        self.server_selected_ip = ip_var.get()
+        if not self.server_room_name:
             messagebox.showerror("Error", "Please enter a room name")
             settings_window.lift()
             return
         settings_window.destroy()
 
         self.root.withdraw()
-        # Запускаем сервер в отдельном потоке
-        def start_server_thread():
-            try:
-                self.server = server.Server(selected_ip, 36500, room_name, self.nickname, password)
-                self.server.start()
-            except Exception as e:
-                print("Server shutted")
 
-        threading.Thread(target=start_server_thread, daemon=True).start()
+        # Запускаем сервер в отдельном процессе
+        self.server_process = Process(target=start_server_process,
+                                      args=(self.server_selected_ip, self.server_room_name, self.nickname, self.server_password)
+                                      )
+        self.server_process.start()
         # Подключаемся как клиент к только что созданной комнате
-        if not selected_ip == "0.0.0.0":
-            self.client = client.Client(selected_ip, 36500, self.nickname, room_name, password)
+        if not self.server_selected_ip == "0.0.0.0":
+            self.client = client.Client(self.server_selected_ip, 36500, self.nickname, self.server_room_name, self.server_password)
         else:
-            self.client = client.Client("localhost", 36500, self.nickname, room_name, password)
+            self.client = client.Client("localhost", 36500, self.nickname, self.server_room_name, self.server_password)
         self.is_hosted = True
         self.client.connect()
-        self.create_chat_window(room_name, selected_ip)  # Передаем IP адрес для заголовка окна
+        self.create_chat_window(self.server_room_name, self.server_selected_ip)  # Передаем IP адрес для заголовка окна
         self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change, self.receive_file)
 
     def show_join_room_window(self):
@@ -503,6 +504,7 @@ class ChatApplication:
         threading.Thread(target=attempt_connection, daemon=True, name="Attempt to connection").start()
 
     def chat_window_name_change(self):
+        self.server_room_name = self.client.room_name
         self.chat_window.title(f"{self.client.room_name} : {self.client.host}")
 
     def attach_file(self):
@@ -651,3 +653,12 @@ class ChatApplication:
         # Отключаем возможность редактирования
         self.message_area.config(state=tk.DISABLED)
         self.message_area.yview(tk.END)
+
+
+def start_server_process(ip, name, nickname, password):
+    try:
+        import server
+        server_process = server.Server(ip, 36500, name, nickname, password)
+        server_process.start()
+    except Exception as e:
+        print("Server shutted")

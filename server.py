@@ -249,3 +249,5 @@ class Server:
             gc.collect()
         except Exception as e:
             print(f"Ошибка при получении файла: {e}")
+
+

@@ -246,6 +246,9 @@ class ChatApplication:
 
 
     def on_chat_window_close(self):
+        if self.active_audio_widget:
+            self.active_audio_widget.stop_audio()
+            self.active_audio_widget = None
         if self.client:
             self.client.disconnect()  # Отключаем клиента, если он есть
         self.root.deiconify()  # Показать главное окно

@@ -1,5 +1,6 @@
 import datetime
 import os
+import subprocess
 import threading
 import time
 import tkinter as tk
@@ -17,6 +18,7 @@ class VoiceRecorder:
         self.device_index = device_index  # Индекс микрофона, если есть
         self.is_recording = False  # Флаг записи
         self.output_file = None
+        self.input_file = None
         self.recording = None
 
         if not os.path.exists("Save"):
@@ -26,8 +28,8 @@ class VoiceRecorder:
     def start_recording(self):
         """Start recording and dynamically set the file name."""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.output_file = os.path.join("Save", f"audio_{timestamp}.ogg")  # Record in .wav
-
+        self.input_file = os.path.join("Save", f"audio_{timestamp}.ogg.temp")
+        self.output_file = os.path.join("Save", f"audio_{timestamp}.ogg")
         self.is_recording = True
         #print(f"Recording started: {self.output_file}")
 
@@ -36,7 +38,7 @@ class VoiceRecorder:
 
     def _record(self):
         """Частная функция для захвата аудио"""
-        with sf.SoundFile(self.output_file, mode='w', samplerate=self.sample_rate, channels=self.channels, format='OGG') as file:
+        with sf.SoundFile(self.input_file, mode='w', samplerate=self.sample_rate, channels=self.channels, format='OGG') as file:
             with sd.InputStream(samplerate=self.sample_rate, channels=self.channels, dtype='float32', device=self.device_index) as stream:
                 while self.is_recording:
                     data = stream.read(self.sample_rate)[0]  # Читаем аудиоданные
@@ -49,6 +51,11 @@ class VoiceRecorder:
         self.is_recording = False
         if self.recording is not None:
             self.recording.join()
+            # Здесь можно сделать нужно или не нужно улучшение записи
+            # Но пока оно будет
+            apply_noise_suppression(self.input_file, self.output_file)
+            #apply_echo_suppression(self.output_file, self.output_file)
+
         #print(f"Запись завершена и сохранена в {self.output_file}")
 
     def close(self):
@@ -64,6 +71,8 @@ class VoiceRecorder:
             if device_info['max_input_channels'] > 0:
                 microphones.append((i, device_info['name']))
         return microphones
+
+
 
 class AudioMessageWidget(ctk.CTkFrame):
     def __init__(self, parent, audio_file, duration, size, chat_app, **kwargs):
@@ -106,6 +115,7 @@ class AudioMessageWidget(ctk.CTkFrame):
 
     @threaded
     def toggle_play(self):
+
         # Проверяем, если уже есть активный виджет аудио и это не текущий виджет
         if self.chat_app.active_audio_widget and self.chat_app.active_audio_widget != self:
             # Останавливаем предыдущий активный аудио виджет
@@ -118,7 +128,7 @@ class AudioMessageWidget(ctk.CTkFrame):
             self.play_button.configure(text="⏸")
             self.update_time()
 
-            # Устанавливаем текущий виджет как активный
+                # Устанавливаем текущий виджет как активный
             self.chat_app.active_audio_widget = self
 
         elif self.audio_player.is_paused:
@@ -136,12 +146,14 @@ class AudioMessageWidget(ctk.CTkFrame):
             self.play_button.configure(text="▶")
 
 
+
     def stop_audio(self):
         """Функция для остановки аудио и сброса состояния."""
         self.audio_player.stop_audio()
         self.play_button.configure(text="▶")
         self.current_time = 0
         self.time_label.configure(text=f"{self.format_time(self.current_time)} / {self.format_time(self.duration)}")
+
 
     @threaded
     def update_time(self):
@@ -159,10 +171,14 @@ class AudioMessageWidget(ctk.CTkFrame):
 
     def on_audio_complete(self):
         """Вызывается, когда аудио заканчивается."""
-        self.play_button.configure(text="▶")  # Сбрасываем кнопку в начальное состояние
-        self.current_time = 0
-        self.time_label.configure(text=f"{self.format_time(self.current_time)} / {self.format_time(self.duration)}")
-        self.audio_player.stop_audio()  # Останавливаем воспроизведение
+        try:
+            self.play_button.configure(text="▶")  # Сбрасываем кнопку в начальное состояние
+            self.current_time = 0
+            self.time_label.configure(text=f"{self.format_time(self.current_time)} / {self.format_time(self.duration)}")
+            self.audio_player.stop_audio()  # Останавливаем воспроизведение
+        except Exception as e:
+            print("Чата больше нет")
+            self.audio_player.reset_audio_player()
 
 
 
@@ -205,8 +221,49 @@ class AudioPlayer:
         self.is_paused = False
         self.is_playing = False
 
+
+    def reset_audio_player(self):
+        """Сбрасываем аудиоплеер, освобождая ресурсы."""
+        pygame.mixer.quit()  # Закрываем текущий микшер
+        pygame.mixer.init()  # Переинициализируем микшер
+
     def _check_audio_complete(self, on_complete_callback):
         """Проверка завершения аудио для вызова коллбэка."""
         while pygame.mixer.music.get_busy() or self.is_paused:
             time.sleep(0.1)
         on_complete_callback()  # Аудио завершено, вызываем коллбэк
+
+
+
+def apply_noise_suppression(input_audio, output_audio):
+
+    command = [
+        'ffmpeg',
+        '-y',   # Флаг для перезаписи файла
+        '-i', input_audio,  # Входной файл
+        '-af',
+        "arnndn=m='models/rnnoise/somnolent-hogwash-2018-09-01/sh.rnnn'",     # Применение фильтра RNNoise
+        output_audio         # Выходной файл
+    ]
+    print("Применился фильтр звука")
+    subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if os.path.exists(input_audio):
+        os.remove(input_audio)
+
+
+def apply_echo_suppression(input_audio, output_audio):
+    # Под вопрос, как бы и нормально, но как будто эхо появляется
+    # output_audio = input_audio.replace('.ogg', '123.ogg')
+    print(input_audio)
+    # https://onelinerhub.com/ffmpeg/how-to-reduce-background-audio-noise-using-afftdn
+    command = [
+        'ffmpeg',
+        '-y',   # Флаг для перезаписи файла
+        '-i', input_audio,  # Входной файл
+        '-af',
+        "afftdn=nr=10:nf=-30:tn=1",
+        output_audio         # Выходной файл
+    ]   # ffmpeg -y -i "Save/audio_2024-10-11_17-37-00_temp.ogg" -af "afftdn=nr=10:nf=-30:tn=1" temp_audio.ogg
+    print("Применился фильтр звука")
+    subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+

@@ -1,17 +1,17 @@
 import subprocess
 import time
 import tkinter as tk
-from tkinter import scrolledtext, messagebox, PhotoImage, filedialog, ttk
+from tkinter import messagebox, filedialog
 import pystray
 from pystray import MenuItem as item
 import threading
 import utils
 import client
 import os
-from PIL import Image, ImageTk
+from PIL import Image
 import soundfile as sf
 from multiprocessing import Process
-
+import customtkinter as ctk
 import voice
 from utils import get_ip_list, threaded
 
@@ -39,70 +39,61 @@ class ChatApplication:
 
 
         self.create_buttons_frame()
-        self.message_area = None
+        self.message_frame = None
         self.user_listbox = None
         self.user_list = []
         self.active_audio_widget = None
-
+        self.VoiceRecorder = voice.VoiceRecorder()
 
         self.chat_window = None
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
 
     def create_buttons_frame(self):
-        button_frame = tk.Frame(self.root, bg='black')
-        button_frame.pack(pady=50, fill=tk.X)
+        # Создаем фрейм для кнопок
+        button_frame = ctk.CTkFrame(self.root, fg_color='black')
+        button_frame.pack(pady=50, fill=ctk.X)
 
         # Заблокировать изменение размера окна
         self.root.resizable(False, False)
 
-        button_style = {
-            'font': ('Helvetica', 16),
-            'bg': '#333',
-            'fg': 'white',
-            'activebackground': '#555',
-            'activeforeground': 'white',
-            'bd': 0,
-            'relief': tk.FLAT,
-            'width': 15,
-            'height': 2
-        }
+        # Кнопка "Create Room"
+        ctk.CTkButton(button_frame, text="Create Room", command=lambda: (
+            messagebox.showerror("Error", "Комната уже создана") if self.is_hosted
+            else self.show_room_settings()), font=('Helvetica', 16), fg_color='#333', text_color='white', hover_color='#555', corner_radius=8, width=200, height=50).pack(pady=10)
 
-        tk.Button(button_frame, text="Create Room", command=lambda: (
-                                    messagebox.showerror("Error", "Комната уже создана") if self.is_hosted
-                                    else self.show_room_settings()),
-                                    **button_style).pack(pady=10)
+        # Кнопка "Join Room"
+        ctk.CTkButton(button_frame, text="Join Room", command=self.show_join_room_window, font=('Helvetica', 16), fg_color='#333', text_color='white', hover_color='#555', corner_radius=8, width=200, height=50).pack(pady=10)
 
-        tk.Button(button_frame, text="Join Room", command=self.show_join_room_window, **button_style).pack(pady=10)
-        tk.Button(button_frame, text="IP List", command=self.ip_list, **button_style).pack(pady=10)
+        # Кнопка "IP List"
+        ctk.CTkButton(button_frame, text="IP List", command=self.ip_list, font=('Helvetica', 16), fg_color='#333', text_color='white', hover_color='#555', corner_radius=8, width=200, height=50).pack(pady=10)
 
         # Фрейм для состояния сервера
-        status_frame = tk.Frame(self.root, bg='black')
-        status_frame.pack(side=tk.LEFT, anchor='sw', padx=10, pady=10)
+        status_frame = ctk.CTkFrame(self.root, fg_color='black')
+        status_frame.pack(side=ctk.LEFT, anchor='sw', padx=10, pady=10)
 
-        # Кружок состояния сервера
-        self.server_status_circle = tk.Canvas(status_frame, width=20, height=20, bg='black', highlightthickness=0)
-        self.server_status_circle.pack(side=tk.LEFT)
+        # Кружок состояния сервера (оставлен на Canvas)
+        self.server_status_circle = ctk.CTkCanvas(status_frame, width=20, height=20, bg='black', highlightthickness=0)
+        self.server_status_circle.pack(side=ctk.LEFT)
 
         # Текст состояния сервера
-        self.server_status_label = tk.Label(status_frame, text="Server is not started", fg='red', bg='black',
-                                            font=('Helvetica', 12))
-        self.server_status_label.pack(side=tk.LEFT)
+        self.server_status_label = ctk.CTkLabel(status_frame, text="Server is not started", text_color='red', font=('Helvetica', 12))
+        self.server_status_label.pack(side=ctk.LEFT)
 
         # Текст IP-адреса
-        self.server_ip_label = tk.Label(status_frame, text="IP: N/A", fg='white', bg='black', font=('Helvetica', 12))
-        self.server_ip_label.pack(side=tk.LEFT, padx=(10, 0))
+        self.server_ip_label = ctk.CTkLabel(status_frame, text="IP: N/A", text_color='white', font=('Helvetica', 12))
+        self.server_ip_label.pack(side=ctk.LEFT, padx=(10, 0))
 
         # Изначально скрываем IP
         self.server_ip_label.pack_forget()
 
-        # Используем place для кнопок, чтобы разместить их над состоянием сервера
-        return_button = tk.Button(self.root, text="Return", command=self.return_to_room, font=('Helvetica', 10),
-                                  bg='#333', fg='white', width=6, height=1, bd=0, relief=tk.FLAT)
-        return_button.place(x=35, y=435)  # Указываем точные координаты для размещения
+        # Кнопка "Return"
+        return_button = ctk.CTkButton(self.root, text="Return", command=self.return_to_room, font=('Helvetica', 14), fg_color='#333', text_color='white', width=60, height=30, corner_radius=15)
+        return_button.place(x=20, y=435)  # Указываем точные координаты для размещения
 
-        close_server_button = tk.Button(self.root, text="Close", command=self.close_server, font=('Helvetica', 10),
-                                        bg='#333', fg='white', width=6, height=1, bd=0, relief=tk.FLAT)
-        close_server_button.place(x=95, y=435)  # Указываем координаты для размещения рядом с Return to Room
+        # Кнопка "Close"
+        close_server_button = ctk.CTkButton(self.root, text="Close", command=self.close_server, font=('Helvetica', 14), fg_color='#333', text_color='white', width=60, height=30, corner_radius=15)
+        close_server_button.place(x=100, y=435)  # Указываем координаты для размещения рядом с Return to Room
+
         self.root.focus_force()
 
 
@@ -140,17 +131,17 @@ class ChatApplication:
         if self.is_hosted:
             # Зелёный кружок
             self.server_status_circle.create_oval(5, 5, 15, 15, fill='green')
-            self.server_status_label.config(text="Server is running", fg='green')
+            self.server_status_label.configure(text="Server is running", text_color='green')
 
             # Отображаем IP, если сервер запущен
             if self.is_hosted:
 
-                self.server_ip_label.config(text=f"IP: {self.server_selected_ip}")
+                self.server_ip_label.configure(text=f"IP: {self.server_selected_ip}")
                 self.server_ip_label.pack(side=tk.LEFT, padx=(10, 0))
         else:
             # Красный кружок
             self.server_status_circle.create_oval(5, 5, 15, 15, fill='red')
-            self.server_status_label.config(text="Server is not started", fg='red')
+            self.server_status_label.configure(text="Server is not started", text_color='red')
 
             # Скрываем IP, если сервер не запущен
             self.server_ip_label.pack_forget()
@@ -172,77 +163,112 @@ class ChatApplication:
 
 
     def create_chat_window(self, room_name, server_ip):
-        self.chat_window = tk.Toplevel()
+        self.chat_window = ctk.CTkToplevel()
         self.chat_window.iconbitmap('Config/Radmin Chat.ico')
         self.chat_window.title(f"{room_name} : {server_ip}")
         self.chat_window.geometry("800x600")
-        self.chat_window.configure(bg='black')
 
-        history_frame = tk.Frame(self.chat_window, bg='black')
-        history_frame.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
+        # Фрейм для списка пользователей справа
+        user_list_frame = ctk.CTkFrame(self.chat_window, fg_color='black', width=200)
+        user_list_frame.grid(row=0, column=2, rowspan=2, sticky='ns', padx=5, pady=5)
 
-        self.message_area = scrolledtext.ScrolledText(history_frame, wrap=tk.WORD, bg='black', fg='white', font=('Helvetica', 12), state=tk.DISABLED)
-        self.message_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Заголовок для списка пользователей
+        self.user_list_label = ctk.CTkLabel(user_list_frame, text="Список пользователей", text_color='white')
+        self.user_list_label.pack(pady=(0, 10))
 
-        user_list_frame = tk.Frame(self.chat_window, bg='black')
-        user_list_frame.grid(row=0, column=1, sticky='ns', padx=5, pady=5)
+        # Создаем Canvas для списка пользователей
+        self.user_canvas = ctk.CTkCanvas(user_list_frame, bg='black', width=200, highlightthickness=False)
+        self.user_canvas.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True)
 
-        self.user_listbox = tk.Listbox(user_list_frame, bg='black', fg='white', font=('Helvetica', 12))
-        self.user_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Прокрутка для списка пользователей
+        self.user_scrollbar = ctk.CTkScrollbar(user_list_frame, orientation="vertical", command=self.user_canvas.yview)
+        self.user_canvas.configure(yscrollcommand=self.user_scrollbar.set)
+        self.user_scrollbar.pack(side="right", fill="y")
 
-        input_frame = tk.Frame(self.chat_window, bg='black')
-        input_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=5, pady=5)
+        # Фрейм внутри Canvas для размещения виджетов с пользователями
+        self.user_frame = ctk.CTkFrame(self.user_canvas, fg_color='black')
+        self.user_canvas.create_window((0, 0), window=self.user_frame, anchor='nw')
 
-        # Загрузка иконок с корректировкой их размера до 35x35
-        paperclip_icon = Image.open("Config/paperclip_icon.png").resize((35, 35))
-        mic_icon = Image.open("Config/microphone_icon.png").resize((35, 35))
-        smile_icon = Image.open("Config/smile_icon.png").resize((35, 35))
-        save_icon = Image.open("Config/save_icon.png").resize((35, 35))
+        # Обновляем размер Canvas при изменении содержимого фрейма
+        self.user_frame.bind("<Configure>", lambda event: self.user_canvas.configure(scrollregion=self.user_canvas.bbox("all")))
 
-        # Преобразование изображений для работы с Tkinter
-        paperclip_icon_tk = ImageTk.PhotoImage(paperclip_icon)
-        mic_icon_tk = ImageTk.PhotoImage(mic_icon)
-        smile_icon_tk = ImageTk.PhotoImage(smile_icon)
-        save_icon_tk = ImageTk.PhotoImage(save_icon)
+        # Фрейм слева (синий)
+        left_frame = ctk.CTkFrame(self.chat_window, fg_color='blue', width=30)
+        left_frame.grid(row=0, column=0, rowspan=2, sticky='ns', padx=5, pady=5)
 
-        # Создание кнопки для скрепки с прозрачным фоном
-        self.paperclip_button = tk.Button(input_frame, image=paperclip_icon_tk, command=self.attach_file, bg='black', borderwidth=0, highlightthickness=0)
-        self.paperclip_button.image = paperclip_icon_tk  # Сохраняем ссылку на изображение
-        self.paperclip_button.pack(side=tk.LEFT, padx=(0, 5))
+        # Фрейм для верхней панели с кнопками (красный)
+        top_buttons_frame = ctk.CTkFrame(self.chat_window, fg_color='red', height=50)
+        top_buttons_frame.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
 
-        # Поле для ввода сообщений (в центре), корректируем высоту
-        self.message_entry = tk.Text(input_frame, bg='#333', fg='white', font=('Helvetica', 12), height=2, width=60)
-        self.message_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.exit_button = ctk.CTkButton(top_buttons_frame, text="Выход", command=self.on_chat_window_close, fg_color=None, hover_color=None, text_color="white")
+        self.exit_button.pack(side=ctk.LEFT, padx=5)
+
+        # Создаем Canvas для сообщений
+        self.history_canvas = ctk.CTkCanvas(self.chat_window, bg='black', highlightthickness=False)
+        self.history_canvas.grid(row=1, column=1, sticky='nsew', padx=5, pady=5)  # Убираем отступ справа, так как скролл вернём внутрь канвы
+
+        # Добавляем прокрутку на канву с сообщениями
+        self.scrollbar = ctk.CTkScrollbar(self.history_canvas, orientation="vertical", command=self.history_canvas.yview)
+        self.scrollbar.pack(side="right", fill="y")  # Возвращаем скроллбар в правую часть канвы
+
+        # Настраиваем канвас, чтобы он реагировал на скроллбар
+        self.history_canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # Фрейм для сообщений внутри Canvas с отступом справа
+        self.message_frame = ctk.CTkFrame(self.history_canvas, fg_color='black')
+
+        # Функция для динамической подстройки ширины фрейма
+        def resize_message_frame(event):
+            canvas_width = event.width - 15  # Добавляем отступ для фрейма, чтобы он не касался скроллбара
+            self.history_canvas.itemconfig(self.message_frame_window, width=canvas_width)
+
+        # Размещаем фрейм в Canvas
+        self.message_frame_window = self.history_canvas.create_window((0, 0), window=self.message_frame, anchor='nw', width=self.history_canvas.winfo_width() - 20)
+
+        # Привязываем изменение размера канваса к функции изменения фрейма
+        self.history_canvas.bind("<Configure>", resize_message_frame)
+
+        # Настраиваем скроллинг, чтобы он работал корректно
+        self.message_frame.bind("<Configure>", lambda event: self.history_canvas.configure(scrollregion=self.history_canvas.bbox("all")))
+
+        # Фрейм для ввода сообщений (внизу)
+        input_frame = ctk.CTkFrame(self.chat_window, fg_color=None)
+        input_frame.grid(row=2, column=1, columnspan=2, sticky='ew', padx=5, pady=5)
+
+        # Загрузка иконок с корректировкой их размера до 35x35, используем CTkImage
+        paperclip_icon = ctk.CTkImage(light_image=Image.open("Config/paperclip_icon.png").resize((45, 45)))
+        mic_icon = ctk.CTkImage(light_image=Image.open("Config/microphone_icon.png").resize((45, 45)))
+        smile_icon = ctk.CTkImage(light_image=Image.open("Config/smile_icon.png").resize((45, 45)))
+        save_icon = ctk.CTkImage(light_image=Image.open("Config/save_icon.png").resize((45, 45)))
+
+        # Создание кнопки для скрепки
+        self.paperclip_button = ctk.CTkButton(input_frame, image=paperclip_icon, command=self.attach_file, fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
+        self.paperclip_button.pack(side=ctk.LEFT, padx=(0, 5))
+
+        # Поле для ввода сообщений - поменять на Input вместо Textbox
+        self.message_entry = ctk.CTkTextbox(input_frame, fg_color='#333', text_color='white', font=('Helvetica', 14), height=10, width=60)
+        self.message_entry.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True)
         self.message_entry.bind('<Return>', self.send_message)
         self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, ''))
 
-        self.VoiceRecorder = voice.VoiceRecorder()
-
-        # Создание кнопок для микрофона, смайлика и сохранения чата с прозрачным фоном
-        self.mic_button = tk.Button(input_frame, image=mic_icon_tk, bg='black', borderwidth=0, highlightthickness=0)
-        self.mic_button.image = mic_icon_tk  # Сохраняем ссылку на изображение
-        self.mic_button.pack(side=tk.LEFT, padx=(5, 5))
-
-        # Привязываем событие нажатия (начало записи)
+        # Создание кнопок для микрофона, смайлика и сохранения чата
+        self.mic_button = ctk.CTkButton(input_frame, image=mic_icon, fg_color="transparent", hover_color=None, text="", width=60, height=60, border_width=0)
+        self.mic_button.pack(side=ctk.LEFT, padx=(5, 5))
         self.mic_button.bind('<ButtonPress-1>', self.start_recording)
-        # Привязываем событие отпускания (окончание записи)
         self.mic_button.bind('<ButtonRelease-1>', self.stop_recording)
 
+        self.smile_button = ctk.CTkButton(input_frame, image=smile_icon, command=self.open_emoji_menu, fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
+        self.smile_button.pack(side=ctk.LEFT, padx=(5, 5))
 
-        self.smile_button = tk.Button(input_frame, image=smile_icon_tk, command=self.open_emoji_menu, bg='black', borderwidth=0, highlightthickness=0)
-        self.smile_button.image = smile_icon_tk  # Сохраняем ссылку на изображение
-        self.smile_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.save_button = ctk.CTkButton(input_frame, image=save_icon, command=lambda: self.save_chat(server_ip), fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
+        self.save_button.pack(side=ctk.LEFT, padx=(5, 0))
 
-        self.save_button = tk.Button(input_frame, image=save_icon_tk, command=lambda: self.save_chat(server_ip), bg='black', borderwidth=0, highlightthickness=0)
-        self.save_button.image = save_icon_tk  # Сохраняем ссылку на изображение
-        self.save_button.pack(side=tk.LEFT, padx=(5, 0))
-
-        # Настройка пропорций сетки для правильного отображения
-        self.chat_window.grid_rowconfigure(0, weight=1)
-        self.chat_window.grid_columnconfigure(0, weight=1)
-        self.chat_window.grid_columnconfigure(1, weight=0)
+        # Настройка пропорций сетки
+        self.chat_window.grid_rowconfigure(1, weight=1)
+        self.chat_window.grid_columnconfigure(1, weight=1)
         self.chat_window.focus_force()
         self.chat_window.protocol("WM_DELETE_WINDOW", self.on_chat_window_close)
+
 
 
     def on_chat_window_close(self):
@@ -266,64 +292,83 @@ class ChatApplication:
 
             self.client.send_message(message_to_send)
             self.message_entry.delete("1.0", tk.END)
-            self.message_area.configure(state=tk.NORMAL)
-            self.message_area.insert(tk.END, f"You: {message}\n")
-            self.message_area.configure(state=tk.DISABLED)
-            self.message_area.yview(tk.END)
+            self.add_message(message, sender="You")
         return 'break'
+
+    def add_message(self, text, sender=""):
+        message_widget = MessageWidget(self.message_frame, text, sender)
+
+        # Сообщения пользователя будут справа, остальные — слева
+        if sender == "You":
+            message_widget.pack(fill="none", padx=5, pady=5, anchor="e")
+        else:
+            message_widget.pack(fill="none", padx=5, pady=5, anchor="w")
+
+        # Прокручиваем вниз, чтобы показывать последнее сообщение
+        self.history_canvas.update_idletasks()
+        self.history_canvas.yview_moveto(1.0)
 
 
     def update_user_list(self, users):
-        self.user_listbox.delete(0, tk.END)
+        # Очищаем текущие кнопки пользователей
+        for widget in self.user_frame.winfo_children():
+            widget.destroy()
+
+        # Добавляем новые кнопки для каждого пользователя
         for user in users:
-            self.user_listbox.insert(tk.END, user)
+            user_button = UserButtonWidget(self.user_frame, username=user, width=120)  # Фиксированная ширина кнопки
+            user_button.pack(pady=2, padx=5, fill='x')
 
     def show_room_settings(self):
-        settings_window = tk.Toplevel(self.root)
+        settings_window = ctk.CTkToplevel(self.root)
         settings_window.title("Room Settings")
         settings_window.iconbitmap('Config/Radmin Chat.ico')
-        settings_window.geometry("350x200")  # Увеличиваем размер окна для всех элементов
-        settings_window.configure(bg='black')
+        settings_window.geometry("270x180")  # Размер окна для всех элементов
+        settings_window.configure(fg_color='black')  # Задаем черный цвет фона
         settings_window.resizable(False, False)
 
-        frame = tk.Frame(settings_window, bg='black')
-        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Сделать окно поверх всех остальных
+        settings_window.attributes('-topmost', True)
+
+        frame = ctk.CTkFrame(settings_window, fg_color='black')
+        frame.pack(fill=ctk.BOTH, expand=True, padx=10, pady=10)
 
         default_room_name, default_password, is_hidden = utils.load_room_settings()
 
         # Поле ввода имени комнаты
-        tk.Label(frame, text="Room Name", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
-        room_name_var = tk.StringVar(value=default_room_name)
-        room_name_entry = tk.Entry(frame, textvariable=room_name_var, bg='#333', fg='white', font=('Helvetica', 12))
+        ctk.CTkLabel(frame, text="Room Name", text_color='white', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
+        room_name_var = ctk.StringVar(value=default_room_name)
+        room_name_entry = ctk.CTkEntry(frame, textvariable=room_name_var, fg_color='#333', text_color='white', font=('Helvetica', 12))
         room_name_entry.grid(row=0, column=1, sticky='ew', pady=5)
 
         # Выпадающий список IP-адресов
-        tk.Label(frame, text="Host IP", fg='white', bg='black', font=('Helvetica', 12)).grid(row=1, column=0, sticky='w', pady=5)
+        ctk.CTkLabel(frame, text="Host IP", text_color='white', font=('Helvetica', 12)).grid(row=1, column=0, sticky='w', pady=5)
 
-        ip_var = tk.StringVar()
+        ip_var = ctk.StringVar()
         available_ips = utils.get_available_ip_addresses()  # Предполагается, что у вас есть эта функция
-        ip_combobox = ttk.Combobox(frame, textvariable=ip_var, values=available_ips, font=('Helvetica', 12))
+        ip_combobox = ctk.CTkComboBox(frame, variable=ip_var, values=available_ips, font=('Helvetica', 12))
         ip_combobox.grid(row=1, column=1, sticky='ew', pady=5)
-        ip_combobox.current(0)  # Устанавливаем первый IP по умолчанию
+        ip_combobox.set(available_ips[0])  # Устанавливаем первый IP по умолчанию
 
         # Поле для пароля
-        show_password_var = tk.BooleanVar()
-        show_password_checkbox = tk.Checkbutton(frame, text="Password", bg='black', fg='white', font=('Helvetica', 12), variable=show_password_var, command=lambda: self.toggle_password_field(password_entry))
+        show_password_var = ctk.BooleanVar()
+        show_password_checkbox = ctk.CTkCheckBox(frame, text="Password", text_color='white', font=('Helvetica', 12), variable=show_password_var, command=lambda: self.toggle_password_field(password_entry))
         show_password_checkbox.grid(row=2, column=0, sticky='w', pady=5)
 
-        password_var = tk.StringVar(value=default_password)
-        password_entry = tk.Entry(frame, textvariable=password_var, show="*", bg='#333', fg='white', font=('Helvetica', 12))
+        password_var = ctk.StringVar(value=default_password)
+        password_entry = ctk.CTkEntry(frame, textvariable=password_var, show="*", fg_color='#333', text_color='white', font=('Helvetica', 12))
         password_entry.grid(row=2, column=1, sticky='ew', pady=5)
 
         if is_hidden:
             password_entry.grid_remove()  # Скрываем поле для пароля по умолчанию
 
         # Кнопка создания комнаты
-        create_button = tk.Button(frame, text="Create Room", command=lambda: self.create_room_with_settings(settings_window, room_name_var, password_var, ip_var), bg='#333', fg='white', font=('Helvetica', 12))
+        create_button = ctk.CTkButton(frame, text="Create Room", command=lambda: self.create_room_with_settings(settings_window, room_name_var, password_var, ip_var), fg_color='#333', text_color='white', font=('Helvetica', 12))
         create_button.grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
 
         settings_window.bind('<Return>', lambda e: self.create_room_with_settings(settings_window, room_name_var, password_var, ip_var))
         settings_window.focus_force()
+
 
 
     def toggle_password_field(self, password_entry):
@@ -361,35 +406,35 @@ class ChatApplication:
         self.client.start_listening(self.handle_message, self.update_user_list, self.chat_window_name_change, self.receive_file)
 
     def show_join_room_window(self):
-        join_window = tk.Toplevel(self.root)
+        join_window = ctk.CTkToplevel(self.root)
         join_window.title("Join Room")
         join_window.iconbitmap('Config/Radmin Chat.ico')
-        join_window.configure(bg='black')
         join_window.geometry("300x150")
         join_window.resizable(False, False)
 
-        frame = tk.Frame(join_window, bg='black')
+        # Сделать окно поверх всех остальных
+        join_window.attributes('-topmost', True)
+
+        # Создаём фрейм
+        frame = ctk.CTkFrame(join_window)
         frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
 
-        # Убираем Room Name, оставляем только Server IP и Password
-        tk.Label(frame, text="Server IP", fg='white', bg='black', font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
-        server_ip_var = tk.StringVar()
-        server_ip_entry = tk.Entry(frame, textvariable=server_ip_var, bg='#333', fg='white', font=('Helvetica', 12), width=20)
+        # Label для ввода Server IP
+        ctk.CTkLabel(frame, text="Server IP", font=('Helvetica', 12)).grid(row=0, column=0, sticky='w', pady=5)
+
+        server_ip_var = ctk.StringVar()
+        server_ip_entry = ctk.CTkEntry(frame, textvariable=server_ip_var, font=('Helvetica', 12), width=200)
         server_ip_entry.grid(row=0, column=1, padx=(5, 10), pady=5)
 
-        # Добавляем привязку события Ctrl + V для поля ввода Server IP
-        #server_ip_entry.bind('<Control-v>', lambda e: server_ip_entry.event_generate('<<Paste>>'))
+        # Label для ввода Password
+        ctk.CTkLabel(frame, text="Password", font=('Helvetica', 12)).grid(row=1, column=0, sticky='w', pady=5)
 
-        tk.Label(frame, text="Password", fg='white', bg='black', font=('Helvetica', 12)).grid(row=1, column=0, sticky='w', pady=5)
-        password_var = tk.StringVar()
-        password_entry = tk.Entry(frame, textvariable=password_var, show="*", bg='#333', fg='white', font=('Helvetica', 12), width=20)
+        password_var = ctk.StringVar()
+        password_entry = ctk.CTkEntry(frame, textvariable=password_var, show="*", font=('Helvetica', 12), width=200)
         password_entry.grid(row=1, column=1, padx=(5, 10), pady=5)
 
-        # Добавляем привязку события Ctrl + V для поля ввода Password
-        #password_entry.bind('<Control-v>', lambda e: password_entry.event_generate('<<Paste>>'))
-
         # Кнопка Join Room
-        join_button = tk.Button(frame, text="Join Room", command=lambda: self.join_room(join_window, server_ip_var, password_var, join_button), bg='#333', fg='white', font=('Helvetica', 12), width=20)
+        join_button = ctk.CTkButton(frame, text="Join Room", command=lambda: self.join_room(join_window, server_ip_var, password_var, join_button), width=200)
         join_button.grid(row=2, column=0, columnspan=2, pady=10)
 
         # Привязка события Enter к полям ввода и кнопке Join Room
@@ -407,10 +452,18 @@ class ChatApplication:
 
 
     def handle_message(self, message):
-        self.message_area.configure(state=tk.NORMAL)
-        self.message_area.insert(tk.END, f"{message}\n")
-        self.message_area.configure(state=tk.DISABLED)
-        self.message_area.yview(tk.END)
+        # Проверка, содержит ли сообщение двоеточие
+        if ':' in message:
+            # Разделяем строку на отправителя и само сообщение
+            sender, text = message.split(':', 1)
+            sender = f"{sender}:"  # Добавляем двоеточие к имени отправителя
+        else:
+            # Если двоеточие не найдено, сообщение от сервера
+            sender = "Server"
+            text = message  # Всё сообщение - это текст
+
+        # Вызываем функцию добавления сообщения с правильным отправителем
+        self.add_message(text.strip(), sender=sender)
 
     def ip_list(self):
         def on_double_click(event):
@@ -470,9 +523,9 @@ class ChatApplication:
         if join_button:
             def unblock_button():
                 if join_button.winfo_exists():  # Проверяем, существует ли кнопка
-                    join_button.config(state=tk.NORMAL)
+                    join_button.configure(state=tk.NORMAL)
 
-            join_button.config(state=tk.DISABLED)
+            join_button.configure(state=tk.DISABLED)
             self.root.after(5000, unblock_button)  # 5000 мс = 5 секунд
 
         # Функция попытки подключения
@@ -538,7 +591,7 @@ class ChatApplication:
             os.makedirs(save_folder)
 
         # Получение всех сообщений из чата
-        messages = self.message_area.get("1.0", tk.END).strip()
+        messages = self.message_frame.get("1.0", tk.END).strip()
 
         # Обработка строк, чтобы добавить приписку "(Файл)", если сообщение содержит ссылку на файл
         processed_messages = []
@@ -555,59 +608,40 @@ class ChatApplication:
         print(f"Чат сохранён в файл: {file_path}")
 
     def receive_file(self, file_name, file_path, sender_nickname):
-        # Отображаем информацию о получении файла в чате
-        self.message_area.config(state=tk.NORMAL)
-
+        # Проверяем тип файла
         if file_name.lower().endswith((".png", ".jpg", ".jpeg")):
             # Если это изображение, отображаем его в чате
-            #self.message_area.insert(tk.END, f"Получено изображение: {file_name}\n")
             self.display_image_in_chat(file_path + f"\\{file_name}")
         elif file_name.lower().endswith(".ogg"):
+            # Если это аудиофайл
             self.add_audio_message(file_path + f"\\{file_name}")
         else:
-            # Создаём выделенный текст с файлом как ссылкой
-            self.message_area.insert(tk.END, f"{sender_nickname}: ", "normal")
-            self.message_area.insert(tk.END, file_name, "file_link")
-            self.message_area.insert(tk.END, "\n")
+            # Добавляем новый FileWidget для файла
+            file_widget = FileWidget(self.message_frame, file_name, file_path, sender=sender_nickname)
+            file_widget.pack(fill="x", padx=5, pady=5)
 
-            # Добавляем возможность открыть файл по клику
-            self.message_area.tag_bind("file_link", "<Button-1>", lambda e: self.open_file_folder(file_path))
-            self.message_area.tag_configure("file_link", foreground="blue", underline=True)
-
-        self.message_area.config(state=tk.DISABLED)
+        # Прокручиваем вниз, чтобы показывать последнее сообщение
+        self.history_canvas.update_idletasks()
+        self.history_canvas.yview_moveto(1.0)
 
     def display_image_in_chat(self, file_path):
         try:
             # Открываем изображение и изменяем его размер
             img = Image.open(file_path)
             img.thumbnail((200, 200))  # Ограничиваем размер изображения для чата
-            img = ImageTk.PhotoImage(img)
+            img_ctk = ctk.CTkImage(img)
 
             # Создаем изображение в текстовом поле
-            self.message_area.image_create(tk.END, image=img)
-            self.message_area.insert(tk.END, "\n")
+            self.message_frame.image_create("end", image=img_ctk)
+            self.message_frame.insert("end", "\n")
 
             # Сохраняем ссылку на изображение в список, чтобы избежать garbage collection
             if not hasattr(self, 'images'):
                 self.images = []  # Инициализируем список, если его ещё нет
-            self.images.append(img)
+            self.images.append(img_ctk)
 
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось загрузить изображение: {e}")
-    def open_file_folder(self, file_path):
-        # Получаем путь к папке, где находится файл
-
-        folder_path = os.getcwd() + f"\\{file_path}"
-        if os.path.exists(folder_path):
-            # Открываем папку в проводнике
-            if os.name == 'nt':  # Проверяем, что мы на Windows
-                subprocess.Popen(f'explorer "{folder_path}"')
-            elif os.name == 'posix':  # Если на macOS или Linux
-                subprocess.Popen(['xdg-open', folder_path])
-            else:
-                messagebox.showerror("Ошибка", "Операционная система не поддерживается")
-        else:
-            messagebox.showerror("Ошибка", f"Папка не найдена: {folder_path}")
 
 
     def start_recording(self, event):
@@ -638,24 +672,18 @@ class ChatApplication:
             frames = len(audio)
             sample_rate = audio.samplerate
             duration_seconds = frames / sample_rate  # Длительность в секундах
-        print(duration_seconds)
-        # Включаем возможность редактирования
-        self.message_area.config(state=tk.NORMAL)
-
-        # Добавляем аудиосообщение в конец чата
-        self.message_area.insert(tk.END, "\n")
 
         # Создаем Frame для аудиосообщения
-        audio_message_frame = tk.Frame(self.message_area, bg='black')
-        self.message_area.window_create(tk.END, window=audio_message_frame)
+        audio_message_frame = ctk.CTkFrame(self.message_frame, fg_color="black")
+        audio_message_frame.pack(fill="x", pady=5)
 
         # Создаем виджет аудиосообщения
         audio_widget = voice.AudioMessageWidget(audio_message_frame, audio_file, duration_seconds, file_size_kb, self)
-        audio_widget.pack(fill=tk.X)
+        audio_widget.pack(fill="x")
 
-        # Отключаем возможность редактирования
-        self.message_area.config(state=tk.DISABLED)
-        self.message_area.yview(tk.END)
+        # Прокручиваем чат вниз после добавления аудиосообщения
+        self.message_frame.update_idletasks()  # Обновляем, чтобы размеры всех виджетов обновились
+        self.history_canvas.yview_moveto(1)  # Прокрутка в самый низ
 
 
 def start_server_process(ip, name, nickname, password):
@@ -665,3 +693,56 @@ def start_server_process(ip, name, nickname, password):
         server_process.start()
     except Exception as e:
         print("Server shutted")
+
+
+
+class MessageWidget(ctk.CTkFrame):
+    def __init__(self, parent, text, sender="You"):
+        super().__init__(parent, fg_color="#2c2f33", border_color="black", border_width=1)
+
+        self.label = ctk.CTkLabel(self, text=f"{sender}: {text}", fg_color=None, text_color="white", font=('Helvetica', 12), wraplength=300, anchor="w")
+        self.label.pack(padx=10, pady=5, anchor="w")
+
+class UserButtonWidget(ctk.CTkButton):
+    def __init__(self, master=None, username="", *args, **kwargs):
+        super().__init__(master, text=username, command=self.on_click, *args, **kwargs)
+        self.username = username
+        self.configure(width=50, font=('Helvetica', 12), fg_color="transparent")
+    def on_click(self):
+        # Здесь можно добавить обработчик нажатия на кнопку
+        print(f"Нажатие на {self.username}")
+
+class FileWidget(ctk.CTkFrame):
+    def __init__(self, parent, file_name, file_path, sender="You", *args, **kwargs):
+        super().__init__(parent, fg_color="#2c2f33", border_color="black", border_width=1, *args, **kwargs)
+
+        self.file_name = file_name
+        self.file_path = file_path
+
+        # Кнопка с иконкой файла
+        #self.file_button = ctk.CTkButton(self, width=35, height=35, image=self.get_file_icon(), text="", command=self.open_file_folder, fg_color=None)
+        self.file_button = ctk.CTkButton(self, width=35, height=35, text="📦", command=self.open_file_folder, fg_color=None, corner_radius=100)
+        self.file_button.pack(side="left", padx=5, pady=5)
+
+        # Метка с именем файла
+        self.label = ctk.CTkLabel(self, text=f"{sender}: {file_name}", fg_color=None, text_color="white", font=('Helvetica', 12), anchor="w")
+        self.label.pack(side="left", padx=10, pady=5, fill="both", expand=True)
+
+    def get_file_icon(self):
+        """Получаем иконку файла (смайлик) в виде изображения."""
+        file_icon_path = "📦"  # Укажите путь к иконке документа (png)
+        return ctk.CTkImage(file_icon_path, size=(35, 35))  # Преобразуем в иконку нужного размера
+
+    def open_file_folder(self):
+        """Открываем проводник с папкой, где находится файл."""
+        folder_path = os.getcwd() + f"\\{self.file_path}"
+        if os.path.exists(folder_path):
+            # Открываем папку в проводнике
+            if os.name == 'nt':  # Проверяем, что мы на Windows
+                subprocess.Popen(f'explorer "{folder_path}"')
+            elif os.name == 'posix':  # Если на macOS или Linux
+                subprocess.Popen(['xdg-open', folder_path])
+            else:
+                messagebox.showerror("Ошибка", "Операционная система не поддерживается")
+        else:
+            messagebox.showerror("Ошибка", f"Папка не найдена: {folder_path}")

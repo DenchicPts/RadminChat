@@ -217,3 +217,111 @@ class Client:
         except Exception as e:
             print(f"Ошибка при отправке файла: {e}")
 
+
+
+    def create_chat_window(self, room_name, server_ip):
+        self.chat_window = ctk.CTkToplevel()
+        self.chat_window.iconbitmap('Config/Radmin Chat.ico')
+        self.chat_window.title(f"{room_name} : {server_ip}")
+        self.chat_window.geometry("800x600")
+
+        # Фрейм для списка пользователей справа
+        user_list_frame = ctk.CTkFrame(self.chat_window, fg_color='black', width=200)
+        user_list_frame.grid(row=0, column=2, rowspan=2, sticky='ns', padx=5, pady=5)
+
+        # Заголовок для списка пользователей
+        self.user_list_label = ctk.CTkLabel(user_list_frame, text="Список пользователей", text_color='white')
+        self.user_list_label.pack(pady=(0, 10))
+
+        # Создаем Canvas для списка пользователей
+        self.user_canvas = ctk.CTkCanvas(user_list_frame, bg='black', width=200)
+        self.user_canvas.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True)
+
+        # Прокрутка для списка пользователей
+        self.user_scrollbar = ctk.CTkScrollbar(user_list_frame, orientation="vertical", command=self.user_canvas.yview)
+        self.user_canvas.configure(yscrollcommand=self.user_scrollbar.set)
+        self.user_scrollbar.pack(side="right", fill="y")
+
+        # Фрейм внутри Canvas для размещения виджетов с пользователями
+        self.user_frame = ctk.CTkFrame(self.user_canvas, fg_color='black')
+        self.user_canvas.create_window((0, 0), window=self.user_frame, anchor='nw')
+
+        # Обновляем размер Canvas при изменении содержимого фрейма
+        self.user_frame.bind("<Configure>", lambda event: self.user_canvas.configure(scrollregion=self.user_canvas.bbox("all")))
+
+        # Фрейм слева (синий)
+        left_frame = ctk.CTkFrame(self.chat_window, fg_color='blue', width=30)
+        left_frame.grid(row=0, column=0, rowspan=2, sticky='ns', padx=5, pady=5)
+
+        # Фрейм для верхней панели с кнопками (красный)
+        top_buttons_frame = ctk.CTkFrame(self.chat_window, fg_color='red', height=50)
+        top_buttons_frame.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+
+        self.exit_button = ctk.CTkButton(top_buttons_frame, text="Выход", command=self.on_chat_window_close, fg_color=None, hover_color=None, text_color="white")
+        self.exit_button.pack(side=ctk.LEFT, padx=5)
+
+        # Создаем Canvas для сообщений
+        self.history_canvas = ctk.CTkCanvas(self.chat_window, bg='white')
+        self.history_canvas.grid(row=1, column=1, sticky='nsew', padx=5, pady=5)
+
+        # Добавляем прокрутку отдельно от канваса
+        self.scrollbar = ctk.CTkScrollbar(self.chat_window, orientation="vertical", command=self.history_canvas.yview)
+        self.scrollbar.grid(row=1, column=2, sticky='ns')  # Размещаем скроллбар рядом с канвасом
+
+        # Настраиваем канвас, чтобы он реагировал на скроллбар
+        self.history_canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # Фрейм для сообщений внутри Canvas
+        self.message_frame = ctk.CTkFrame(self.history_canvas, fg_color='red')
+
+        # Функция для динамической подстройки ширины фрейма
+        def resize_message_frame(event):
+            canvas_width = event.width
+            self.history_canvas.itemconfig(self.message_frame_window, width=canvas_width)
+
+        # Размещаем фрейм в Canvas
+        self.message_frame_window = self.history_canvas.create_window((0, 0), window=self.message_frame, anchor='nw')
+
+        # Привязываем изменение размера канваса к функции изменения фрейма
+        self.history_canvas.bind("<Configure>", resize_message_frame)
+
+        # Настраиваем скроллинг, чтобы он работал корректно
+        self.message_frame.bind("<Configure>", lambda event: self.history_canvas.configure(scrollregion=self.history_canvas.bbox("all")))
+
+        # Фрейм для ввода сообщений (внизу)
+        input_frame = ctk.CTkFrame(self.chat_window, fg_color=None)
+        input_frame.grid(row=2, column=1, columnspan=2, sticky='ew', padx=5, pady=5)
+
+        # Загрузка иконок с корректировкой их размера до 35x35, используем CTkImage
+        paperclip_icon = ctk.CTkImage(light_image=Image.open("Config/paperclip_icon.png").resize((45, 45)))
+        mic_icon = ctk.CTkImage(light_image=Image.open("Config/microphone_icon.png").resize((45, 45)))
+        smile_icon = ctk.CTkImage(light_image=Image.open("Config/smile_icon.png").resize((45, 45)))
+        save_icon = ctk.CTkImage(light_image=Image.open("Config/save_icon.png").resize((45, 45)))
+
+        # Создание кнопки для скрепки
+        self.paperclip_button = ctk.CTkButton(input_frame, image=paperclip_icon, command=self.attach_file, fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
+        self.paperclip_button.pack(side=ctk.LEFT, padx=(0, 5))
+
+        # Поле для ввода сообщений
+        self.message_entry = ctk.CTkTextbox(input_frame, fg_color='#333', text_color='white', font=('Helvetica', 14), height=10, width=60)
+        self.message_entry.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True)
+        self.message_entry.bind('<Return>', self.send_message)
+        self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, ''))
+
+        # Создание кнопок для микрофона, смайлика и сохранения чата
+        self.mic_button = ctk.CTkButton(input_frame, image=mic_icon, fg_color="transparent", hover_color=None, text="", width=60, height=60, border_width=0)
+        self.mic_button.pack(side=ctk.LEFT, padx=(5, 5))
+        self.mic_button.bind('<ButtonPress-1>', self.start_recording)
+        self.mic_button.bind('<ButtonRelease-1>', self.stop_recording)
+
+        self.smile_button = ctk.CTkButton(input_frame, image=smile_icon, command=self.open_emoji_menu, fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
+        self.smile_button.pack(side=ctk.LEFT, padx=(5, 5))
+
+        self.save_button = ctk.CTkButton(input_frame, image=save_icon, command=lambda: self.save_chat(server_ip), fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
+        self.save_button.pack(side=ctk.LEFT, padx=(5, 0))
+
+        # Настройка пропорций сетки
+        self.chat_window.grid_rowconfigure(1, weight=1)
+        self.chat_window.grid_columnconfigure(1, weight=1)
+        self.chat_window.focus_force()
+        self.chat_window.protocol("WM_DELETE_WINDOW", self.on_chat_window_close)

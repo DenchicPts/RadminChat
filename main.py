@@ -23,5 +23,5 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support() # Необходимая фигня для того чтобы создание новых процессов было бы возможным
+    multiprocessing.freeze_support()    # Необходимая фигня для того чтобы создание новых процессов было бы возможным
     main()

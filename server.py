@@ -73,7 +73,7 @@ class Server:
                 else:
                     print(f"SERVER Success connection from {self.addresses[client_socket]}")
                     client_socket.send("#MESSAGE#Success connection".encode('utf-8'))
-                    time.sleep(0.20)
+                    time.sleep(0.30)
 
                 # Проверяем, не хост ли это (по IP)
                 if self.addresses[client_socket] in {self.host, "127.0.0.1"}:
@@ -88,9 +88,10 @@ class Server:
                 # Отправляем клиенту название комнаты
                 client_socket.send(f"#ROOMNAME#{self.room_name}".encode('utf-8'))
                 utils.save_room_settings(self.room_name, password)
-                time.sleep(0.25)
+                time.sleep(0.5)
 
                 client_socket.send(f"#MESSAGE#Welcome to the chat, {nickname}!".encode('utf-8'))
+
                 self.update_user_list()
 
             # Для работы с файлами
@@ -229,7 +230,7 @@ class Server:
 
             # Пересылка файла другим клиентам
             for client in self.clients:
-                if not client == client_socket:
+                if True:
                     client.send(f"FILE:{nickname}:{file_name}:{file_size}:{file_counts}".encode('utf-8'))
 
                     # Отправляем файл чанками

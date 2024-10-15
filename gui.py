@@ -8,7 +8,7 @@ import threading
 import utils
 import client
 import os
-from PIL import Image
+from PIL import Image, ImageTk
 import soundfile as sf
 from multiprocessing import Process
 import customtkinter as ctk
@@ -28,6 +28,8 @@ class ChatApplication:
         self.icon_image = utils.create_custom_icon()
         self.icon_image.save('Config/Radmin Chat.ico')
         self.root.iconbitmap('Config/Radmin Chat.ico')
+        self.application_icon = 'Config/Radmin Chat.ico'
+
 
         self.tray_icon = None
         self.client = None
@@ -164,12 +166,14 @@ class ChatApplication:
 
     def create_chat_window(self, room_name, server_ip):
         self.chat_window = ctk.CTkToplevel()
-        self.chat_window.iconbitmap('Config/Radmin Chat.ico')
+        self.chat_window.withdraw()
+        self.chat_window.after(500, self.chat_window.deiconify())
         self.chat_window.title(f"{room_name} : {server_ip}")
         self.chat_window.geometry("800x600")
-
+        #self.chat_window.minsize(500, 350)
+        self.chat_window.after(300, lambda: self.chat_window.iconbitmap(self.application_icon))
         # Фрейм для списка пользователей справа
-        user_list_frame = ctk.CTkFrame(self.chat_window, fg_color='black', width=200)
+        user_list_frame = ctk.CTkFrame(self.chat_window, fg_color='#252850', width=200)
         user_list_frame.grid(row=0, column=2, rowspan=2, sticky='ns', padx=5, pady=5)
 
         # Заголовок для списка пользователей
@@ -177,7 +181,7 @@ class ChatApplication:
         self.user_list_label.pack(pady=(0, 10))
 
         # Создаем Canvas для списка пользователей
-        self.user_canvas = ctk.CTkCanvas(user_list_frame, bg='black', width=200, highlightthickness=False)
+        self.user_canvas = ctk.CTkCanvas(user_list_frame, bg='#252850', width=200, highlightthickness=False)
         self.user_canvas.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True)
 
         # Прокрутка для списка пользователей
@@ -186,25 +190,25 @@ class ChatApplication:
         self.user_scrollbar.pack(side="right", fill="y")
 
         # Фрейм внутри Canvas для размещения виджетов с пользователями
-        self.user_frame = ctk.CTkFrame(self.user_canvas, fg_color='black')
+        self.user_frame = ctk.CTkFrame(self.user_canvas, fg_color='#252850')
         self.user_canvas.create_window((0, 0), window=self.user_frame, anchor='nw')
 
         # Обновляем размер Canvas при изменении содержимого фрейма
         self.user_frame.bind("<Configure>", lambda event: self.user_canvas.configure(scrollregion=self.user_canvas.bbox("all")))
 
         # Фрейм слева (синий)
-        left_frame = ctk.CTkFrame(self.chat_window, fg_color='blue', width=30)
+        left_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D', width=30)
         left_frame.grid(row=0, column=0, rowspan=2, sticky='ns', padx=5, pady=5)
 
         # Фрейм для верхней панели с кнопками (красный)
-        top_buttons_frame = ctk.CTkFrame(self.chat_window, fg_color='red', height=50)
+        top_buttons_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D', height=50)
         top_buttons_frame.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
 
         self.exit_button = ctk.CTkButton(top_buttons_frame, text="Выход", command=self.on_chat_window_close, fg_color=None, hover_color=None, text_color="white")
         self.exit_button.pack(side=ctk.LEFT, padx=5)
 
         # Создаем Canvas для сообщений
-        self.history_canvas = ctk.CTkCanvas(self.chat_window, bg='black', highlightthickness=False)
+        self.history_canvas = ctk.CTkCanvas(self.chat_window, bg='#252850', highlightthickness=False)
         self.history_canvas.grid(row=1, column=1, sticky='nsew', padx=5, pady=5)  # Убираем отступ справа, так как скролл вернём внутрь канвы
 
         # Добавляем прокрутку на канву с сообщениями
@@ -215,18 +219,19 @@ class ChatApplication:
         self.history_canvas.configure(yscrollcommand=self.scrollbar.set)
 
         # Фрейм для сообщений внутри Canvas с отступом справа
-        self.message_frame = ctk.CTkFrame(self.history_canvas, fg_color='black')
+        self.message_frame = ctk.CTkFrame(self.history_canvas, fg_color='#252850')
 
         # Функция для динамической подстройки ширины фрейма
         def resize_message_frame(event):
+            # Проверяем, что фрейм и окно для сообщений уже созданы
             canvas_width = event.width - 15  # Добавляем отступ для фрейма, чтобы он не касался скроллбара
             self.history_canvas.itemconfig(self.message_frame_window, width=canvas_width)
 
-        # Размещаем фрейм в Canvas
-        self.message_frame_window = self.history_canvas.create_window((0, 0), window=self.message_frame, anchor='nw', width=self.history_canvas.winfo_width() - 20)
 
+        # Размещаем фрейм в Canvas
+        self.message_frame_window = self.history_canvas.create_window((0, 0), window=self.message_frame, anchor='nw', width=self.history_canvas.winfo_width() + 130)
         # Привязываем изменение размера канваса к функции изменения фрейма
-        self.history_canvas.bind("<Configure>", resize_message_frame)
+        self.history_canvas.after(400, lambda: self.history_canvas.bind("<Configure>", lambda event: resize_message_frame(event)))
 
         # Настраиваем скроллинг, чтобы он работал корректно
         self.message_frame.bind("<Configure>", lambda event: self.history_canvas.configure(scrollregion=self.history_canvas.bbox("all")))
@@ -322,7 +327,10 @@ class ChatApplication:
     def show_room_settings(self):
         settings_window = ctk.CTkToplevel(self.root)
         settings_window.title("Room Settings")
-        settings_window.iconbitmap('Config/Radmin Chat.ico')
+
+        # Для отображения иконки
+        settings_window.after(300, lambda: settings_window.iconbitmap(self.application_icon))
+
         settings_window.geometry("270x180")  # Размер окна для всех элементов
         settings_window.configure(fg_color='black')  # Задаем черный цвет фона
         settings_window.resizable(False, False)
@@ -370,7 +378,6 @@ class ChatApplication:
         settings_window.focus_force()
 
 
-
     def toggle_password_field(self, password_entry):
 
         if password_entry.winfo_ismapped():
@@ -408,7 +415,10 @@ class ChatApplication:
     def show_join_room_window(self):
         join_window = ctk.CTkToplevel(self.root)
         join_window.title("Join Room")
-        join_window.iconbitmap('Config/Radmin Chat.ico')
+
+        # Для отображения иконки
+        join_window.after(300, lambda: join_window.iconbitmap(self.application_icon))
+
         join_window.geometry("300x150")
         join_window.resizable(False, False)
 
@@ -618,7 +628,7 @@ class ChatApplication:
         else:
             # Добавляем новый FileWidget для файла
             file_widget = FileWidget(self.message_frame, file_name, file_path, sender=sender_nickname)
-            file_widget.pack(fill="x", padx=5, pady=5)
+            file_widget.pack(fill="none", padx=5, pady=5, anchor="w")
 
         # Прокручиваем вниз, чтобы показывать последнее сообщение
         self.history_canvas.update_idletasks()
@@ -726,7 +736,7 @@ class FileWidget(ctk.CTkFrame):
 
         # Метка с именем файла
         self.label = ctk.CTkLabel(self, text=f"{sender}: {file_name}", fg_color=None, text_color="white", font=('Helvetica', 12), anchor="w")
-        self.label.pack(side="left", padx=10, pady=5, fill="both", expand=True)
+        self.label.pack(side="left", padx=10, pady=5, fill="both", )
 
     def get_file_icon(self):
         """Получаем иконку файла (смайлик) в виде изображения."""

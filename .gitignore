@@ -20,3 +20,5 @@ main.spec
 ffmpeg.exe
 
 ffplay.exe
+
+__pycache__/

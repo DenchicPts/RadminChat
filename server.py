@@ -1,3 +1,4 @@
+import re
 import socket
 import threading
 import os
@@ -19,6 +20,12 @@ class Server:
         self.room_password = password
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.stop_event = threading.Event()
+
+        self.command_list = {
+            "#CHANGEROOMNAME#": self.handle_room_name,
+            "#MESSAGE#": self.handle_message,
+        }
+
 
     def start(self):
         self.server_socket.bind((self.host, self.port))
@@ -73,7 +80,7 @@ class Server:
                 else:
                     print(f"SERVER Success connection from {self.addresses[client_socket]}")
                     client_socket.send("#MESSAGE#Success connection".encode('utf-8'))
-                    time.sleep(0.30)
+
 
                 # Проверяем, не хост ли это (по IP)
                 if self.addresses[client_socket] in {self.host, "127.0.0.1"}:
@@ -88,7 +95,6 @@ class Server:
                 # Отправляем клиенту название комнаты
                 client_socket.send(f"#ROOMNAME#{self.room_name}".encode('utf-8'))
                 utils.save_room_settings(self.room_name, password)
-                time.sleep(0.5)
 
                 client_socket.send(f"#MESSAGE#Welcome to the chat, {nickname}!".encode('utf-8'))
 
@@ -111,15 +117,9 @@ class Server:
 
                 if message and decoded_message and not is_txt_file:
                     print(f"SERVER Received message from {self.addresses[client_socket]}: {message}")
-                    if message.startswith("#CHANGEROOMNAME#") and self.addresses[client_socket] in {self.host, "127.0.0.1"}:
-                        new_name = message[len("#CHANGEROOMNAME#"):].strip()
-                        if new_name:
-                            self.room_name = new_name
-                            utils.save_room_settings(self.room_name, self.room_password)
-                            self.broadcast(f"#ROOMNAME#{self.room_name}")
-                            self.broadcast(f"Room name changed to: {self.room_name}")
+                    self.process_message(message, client_socket)
 
-                    elif message.startswith("FILE:"):
+                    if message.startswith("FILE:"):
                         parts = message.split(":")
                         sender_nickname = parts[1]
                         file_name = parts[2]
@@ -145,12 +145,6 @@ class Server:
                             if file_counts == len(file_paths):
                                 threading.Thread(target=self.send_files, args=(client_socket, file_paths, sender_nickname), daemon=True).start()
                                 file_paths = None
-
-
-
-                    elif message.startswith("#MESSAGE#"):
-                        message_to_send = message[len("#MESSAGE#"):].strip()
-                        self.broadcast(f"#MESSAGE#{self.clients[client_socket]}: {message_to_send}", client_socket)
 
 
                 elif message and not decoded_message or is_txt_file:
@@ -246,9 +240,34 @@ class Server:
                             del chunk
                             time.sleep(0.01)
 
-            time.sleep(1.5) # В случае чего увеличить задержку(зависит от качества соединения)
+            time.sleep(1.5)     # В случае чего увеличить задержку(зависит от качества соединения)
             gc.collect()
         except Exception as e:
             print(f"Ошибка при получении файла: {e}")
 
+    def process_message(self, message, client_socket):
+        # Модифицируем регулярное выражение для захвата содержимого команд, включая переносы строк
+        commands = re.findall(r'(#\w+#)(.*?)((?=#\w+#)|$)', message, re.DOTALL)
 
+        for command_tuple in commands:
+            command = command_tuple[0].strip()  # Команда (#ROOMNAME#, #USERS_IP# и т.д.)
+            data = command_tuple[1].strip()  # Данные после команды
+
+            handler = self.command_list.get(command)
+            if handler:
+                # Вызов обработчика с данными и дополнительным параметром
+                handler(data, client_socket)  # Передаем нужные значения
+            else:
+                print(f"Unrecognized command: {command}")
+
+    def handle_message(self, message, client_socket):
+        self.broadcast(f"#MESSAGE#{self.clients[client_socket]}: {message}", client_socket)
+
+    def handle_room_name(self, data, client_socket):
+        if self.addresses[client_socket] in {self.host, "127.0.0.1"}:
+            new_name = data
+            if new_name:
+                self.room_name = new_name
+                utils.save_room_settings(self.room_name, self.room_password)
+                self.broadcast(f"#ROOMNAME#{self.room_name}")
+                self.broadcast(f"Room name changed to: {self.room_name}")

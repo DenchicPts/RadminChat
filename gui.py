@@ -166,11 +166,11 @@ class ChatApplication:
 
     def create_chat_window(self, room_name, server_ip):
         self.chat_window = ctk.CTkToplevel()
-        self.chat_window.withdraw()
-        self.chat_window.after(500, self.chat_window.deiconify())
+       # self.chat_window.withdraw()
+        #self.chat_window.after(50, self.chat_window.deiconify())
         self.chat_window.title(f"{room_name} : {server_ip}")
         self.chat_window.geometry("800x600")
-        #self.chat_window.minsize(500, 350)
+        self.chat_window.minsize(500, 350)
         self.chat_window.after(300, lambda: self.chat_window.iconbitmap(self.application_icon))
         # Фрейм для списка пользователей справа
         user_list_frame = ctk.CTkFrame(self.chat_window, fg_color='#252850', width=200)
@@ -268,13 +268,51 @@ class ChatApplication:
         self.save_button = ctk.CTkButton(input_frame, image=save_icon, command=lambda: self.save_chat(server_ip), fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
         self.save_button.pack(side=ctk.LEFT, padx=(5, 0))
 
+        def on_mouse_drag(event):
+            # Перед началом нового выделения сбрасываем предыдущее
+            #self.clear_selection()
+            # Получаем координаты мыши
+            mouse_y = event.y
+            # Определяем виджеты сообщений, находящиеся под курсором
+            for widget in self.message_frame.winfo_children():
+                if widget.winfo_y() <= mouse_y <= widget.winfo_y() + widget.winfo_height():
+                    widget.toggle_selection()  # Меняем состояние выделения
+
+
+        self.message_frame.bind("<Button-1>", lambda event: on_mouse_drag(event))
+        self.message_frame.bind("<B1-Motion>", lambda event: on_mouse_drag(event))
+        # Привязываем событие для копирования текста
+        self.chat_window.bind("<Control-c>", lambda event: self.copy_selected_messages())
+
         # Настройка пропорций сетки
         self.chat_window.grid_rowconfigure(1, weight=1)
         self.chat_window.grid_columnconfigure(1, weight=1)
         self.chat_window.focus_force()
         self.chat_window.protocol("WM_DELETE_WINDOW", self.on_chat_window_close)
 
+    def copy_selected_messages(self):
+        selected_texts = []
 
+        # Собираем тексты всех выделенных сообщений
+        for widget in self.message_frame.winfo_children():
+            if hasattr(widget, 'selected') and widget.selected:
+                selected_texts.append(widget.text)
+
+        if selected_texts:
+            # Проверяем корректность работы с буфером обмена
+            try:
+                self.chat_window.clipboard_clear()
+                self.chat_window.clipboard_append("\n\n".join(selected_texts))
+                self.chat_window.update()  # Обновляем буфер обмена
+            except Exception as e:
+                print(f"Ошибка копирования в буфер: {e}")
+
+    def clear_selection(self):
+        """Сбрасываем выделение у всех сообщений."""
+        for widget in self.message_frame.winfo_children():
+            if hasattr(widget, 'selected') and widget.selected:
+                widget.selected = False
+                widget.configure(fg_color="#2c2f33")  # Возвращаем исходный цвет фона
 
     def on_chat_window_close(self):
         if self.active_audio_widget:
@@ -708,10 +746,42 @@ def start_server_process(ip, name, nickname, password):
 
 class MessageWidget(ctk.CTkFrame):
     def __init__(self, parent, text, sender="You"):
-        super().__init__(parent, fg_color="#2c2f33", border_color="black", border_width=1)
+        super().__init__(parent, fg_color="#2c2f33", border_color="#2c2f33", border_width=1)
+        self.text = text
+        self.selected = False  # Флаг выделения
 
-        self.label = ctk.CTkLabel(self, text=f"{sender}: {text}", fg_color=None, text_color="white", font=('Helvetica', 12), wraplength=300, anchor="w")
-        self.label.pack(padx=10, pady=5, anchor="w")
+        # Создаем текстовое поле для отображения сообщения
+        self.textbox = ctk.CTkTextbox(self, fg_color="#2c2f33", wrap="word", height=50, font=('Helvetica', 12))
+        self.textbox.insert("1.0", f"{sender}: {text}")
+        self.textbox.configure(state="disabled")  # Запрещаем редактирование текста
+        self.textbox.pack(padx=10, pady=5, anchor="w", fill="both", expand=True)
+
+        # Устанавливаем размер фрейма в зависимости от текста
+        self.update_size()
+
+        # Привязываем событие нажатия клавиш для копирования текста
+        self.bind("<Control-c>", self.copy_text)
+
+    def update_size(self):
+        # Устанавливаем размер фрейма в зависимости от текста
+        self.update_idletasks()
+        self.configure(width=self.textbox.winfo_width(), height=self.textbox.winfo_height())
+
+    def copy_text(self, event):
+        # Копируем текст в буфер обмена
+        self.clipboard_clear()
+        self.clipboard_append(self.textbox.get("1.0", "end-1c"))
+
+    def toggle_selection(self):
+        # Переключаем выделение и изменяем цвет фона
+        self.selected = not self.selected
+        if self.selected:
+            self.configure(fg_color="#2c778f")  # Цвет для выделенного сообщения
+            self.textbox.configure(fg_color="#2c778f")
+        else:
+            self.configure(fg_color="#2c2f33")  # Исходный цвет
+            self.textbox.configure(fg_color="#2c2f33")
+
 
 class UserButtonWidget(ctk.CTkButton):
     def __init__(self, master=None, username="", *args, **kwargs):

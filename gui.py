@@ -267,19 +267,44 @@ class ChatApplication:
 
         self.save_button = ctk.CTkButton(input_frame, image=save_icon, command=lambda: self.save_chat(server_ip), fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
         self.save_button.pack(side=ctk.LEFT, padx=(5, 0))
+        self.is_unpressed = False
+
+        def on_mouse_press(event):
+            self.is_unpressed = not self.is_unpressed  # Меняем флаг при нажатии кнопки
+            self.last_mouse_y = event.y  # Сохраняем координату Y при нажатии
+            self.drag_direction = None  # Для отслеживания направления движения мыши
+            mouse_y = event.y
+            for widget in self.message_frame.winfo_children():
+                widget_y_top = widget.winfo_y()
+                widget_y_bottom = widget.winfo_y() + widget.winfo_height()
+                if widget_y_top <= mouse_y <= widget_y_bottom:
+                    widget.toggle_selection()  # Меняем выделение для виджета, на который нажали
 
         def on_mouse_drag(event):
-            # Перед началом нового выделения сбрасываем предыдущее
-            #self.clear_selection()
-            # Получаем координаты мыши
             mouse_y = event.y
-            # Определяем виджеты сообщений, находящиеся под курсором
+            direction = "down" if mouse_y > self.last_mouse_y else "up"  # Определяем направление движения мыши
+
+            # Если направление изменилось, обновляем флаг
+            if self.drag_direction is None:
+                self.drag_direction = direction
+            elif self.drag_direction != direction:
+                self.is_unpressed = not self.is_unpressed
+                self.drag_direction = direction
+
             for widget in self.message_frame.winfo_children():
-                if widget.winfo_y() <= mouse_y <= widget.winfo_y() + widget.winfo_height():
-                    widget.toggle_selection()  # Меняем состояние выделения
+                widget_y_top = widget.winfo_y()
+                widget_y_bottom = widget.winfo_y() + widget.winfo_height()
 
+                # Если курсор находится на виджете
+                if widget_y_top <= mouse_y <= widget_y_bottom:
+                    if not widget.is_selected and self.is_unpressed:
+                        widget.toggle_selection()  # Выделяем, если движемся вниз
+                    elif widget.is_selected and not self.is_unpressed:
+                        widget.toggle_selection()  # Снимаем выделение при движении вверх
 
-        self.message_frame.bind("<Button-1>", lambda event: on_mouse_drag(event))
+            self.last_mouse_y = mouse_y  # Обновляем последнюю позицию Y
+
+        self.message_frame.bind("<Button-1>", lambda event: on_mouse_press(event))
         self.message_frame.bind("<B1-Motion>", lambda event: on_mouse_drag(event))
         # Привязываем событие для копирования текста
         self.chat_window.bind("<Control-c>", lambda event: self.copy_selected_messages())
@@ -295,7 +320,7 @@ class ChatApplication:
 
         # Собираем тексты всех выделенных сообщений
         for widget in self.message_frame.winfo_children():
-            if hasattr(widget, 'selected') and widget.selected:
+            if hasattr(widget, 'is_selected') and widget.is_selected:
                 selected_texts.append(widget.text)
 
         if selected_texts:
@@ -306,13 +331,6 @@ class ChatApplication:
                 self.chat_window.update()  # Обновляем буфер обмена
             except Exception as e:
                 print(f"Ошибка копирования в буфер: {e}")
-
-    def clear_selection(self):
-        """Сбрасываем выделение у всех сообщений."""
-        for widget in self.message_frame.winfo_children():
-            if hasattr(widget, 'selected') and widget.selected:
-                widget.selected = False
-                widget.configure(fg_color="#2c2f33")  # Возвращаем исходный цвет фона
 
     def on_chat_window_close(self):
         if self.active_audio_widget:
@@ -748,19 +766,16 @@ class MessageWidget(ctk.CTkFrame):
     def __init__(self, parent, text, sender="You"):
         super().__init__(parent, fg_color="#2c2f33", border_color="#2c2f33", border_width=1)
         self.text = text
-        self.selected = False  # Флаг выделения
+        self.is_selected = False  # Флаг выделения
 
         # Создаем текстовое поле для отображения сообщения
-        self.textbox = ctk.CTkTextbox(self, fg_color="#2c2f33", wrap="word", height=50, font=('Helvetica', 12))
-        self.textbox.insert("1.0", f"{sender}: {text}")
-        self.textbox.configure(state="disabled")  # Запрещаем редактирование текста
+        self.textbox = ctk.CTkLabel(self, fg_color="#2c2f33", text=f"{sender}: {text}",height=50, font=('Helvetica', 12))
         self.textbox.pack(padx=10, pady=5, anchor="w", fill="both", expand=True)
 
         # Устанавливаем размер фрейма в зависимости от текста
-        self.update_size()
 
         # Привязываем событие нажатия клавиш для копирования текста
-        self.bind("<Control-c>", self.copy_text)
+        #self.bind("<Control-c>", self.copy_text)
 
     def update_size(self):
         # Устанавливаем размер фрейма в зависимости от текста
@@ -774,8 +789,8 @@ class MessageWidget(ctk.CTkFrame):
 
     def toggle_selection(self):
         # Переключаем выделение и изменяем цвет фона
-        self.selected = not self.selected
-        if self.selected:
+        self.is_selected = not self.is_selected
+        if self.is_selected:
             self.configure(fg_color="#2c778f")  # Цвет для выделенного сообщения
             self.textbox.configure(fg_color="#2c778f")
         else:

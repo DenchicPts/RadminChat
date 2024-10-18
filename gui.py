@@ -173,100 +173,80 @@ class ChatApplication:
         self.chat_window.minsize(500, 350)
         self.chat_window.after(300, lambda: self.chat_window.iconbitmap(self.application_icon))
         # Фрейм для списка пользователей справа
-        user_list_frame = ctk.CTkFrame(self.chat_window, fg_color='#252850', width=200)
+        user_list_frame = ctk.CTkFrame(self.chat_window, fg_color='#252850', width=150)
         user_list_frame.grid(row=0, column=2, rowspan=2, sticky='ns', padx=5, pady=5)
 
         # Заголовок для списка пользователей
         self.user_list_label = ctk.CTkLabel(user_list_frame, text="Список пользователей", text_color='white')
-        self.user_list_label.pack(pady=(0, 10))
+        self.user_list_label.grid(row=0, column=0, pady=(0, 10))
 
-        # Создаем Canvas для списка пользователей
-        self.user_canvas = ctk.CTkCanvas(user_list_frame, bg='#252850', width=200, highlightthickness=False)
-        self.user_canvas.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True)
-
-        # Прокрутка для списка пользователей
-        self.user_scrollbar = ctk.CTkScrollbar(user_list_frame, orientation="vertical", command=self.user_canvas.yview)
-        self.user_canvas.configure(yscrollcommand=self.user_scrollbar.set)
-        self.user_scrollbar.pack(side="right", fill="y")
-
-        # Фрейм внутри Canvas для размещения виджетов с пользователями
-        self.user_frame = ctk.CTkFrame(self.user_canvas, fg_color='#252850')
-        self.user_canvas.create_window((0, 0), window=self.user_frame, anchor='nw')
-
-        # Обновляем размер Canvas при изменении содержимого фрейма
-        self.user_frame.bind("<Configure>", lambda event: self.user_canvas.configure(scrollregion=self.user_canvas.bbox("all")))
+        # Прокручиваемый Canvas для списка пользователей
+        self.user_frame = ctk.CTkScrollableFrame(user_list_frame, fg_color='#252850', width=200)
+        self.user_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
         # Фрейм слева (синий)
-        left_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D', width=30)
+        left_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D', width=40)
         left_frame.grid(row=0, column=0, rowspan=2, sticky='ns', padx=5, pady=5)
 
         # Фрейм для верхней панели с кнопками (красный)
         top_buttons_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D', height=50)
         top_buttons_frame.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
 
-        self.exit_button = ctk.CTkButton(top_buttons_frame, text="Выход", command=self.on_chat_window_close, fg_color=None, hover_color=None, text_color="white")
-        self.exit_button.pack(side=ctk.LEFT, padx=5)
+        self.exit_button = ctk.CTkButton(top_buttons_frame, text="Выход", command=self.on_chat_window_close,
+                                         fg_color=None, hover_color=None, text_color="white")
+        self.exit_button.grid(row=0, column=0, padx=5)
 
-        # Создаем Canvas для сообщений
-        self.history_canvas = ctk.CTkCanvas(self.chat_window, bg='#252850', highlightthickness=False)
-        self.history_canvas.grid(row=1, column=1, sticky='nsew', padx=5, pady=5)  # Убираем отступ справа, так как скролл вернём внутрь канвы
+        # Фрейм для сообщений (красный)
+        message_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D')
+        message_frame.grid(row=1, column=1, sticky='nsew', padx=5, pady=5)
 
-        # Добавляем прокрутку на канву с сообщениями
-        self.scrollbar = ctk.CTkScrollbar(self.history_canvas, orientation="vertical", command=self.history_canvas.yview)
-        self.scrollbar.pack(side="right", fill="y")  # Возвращаем скроллбар в правую часть канвы
+        self.message_frame = ctk.CTkScrollableFrame(message_frame, fg_color='#252850')
+        self.message_frame.pack(fill="both", expand=True)
 
-        # Настраиваем канвас, чтобы он реагировал на скроллбар
-        self.history_canvas.configure(yscrollcommand=self.scrollbar.set)
+        # Фрейм для ввода сообщений и кнопок (внизу)
+        input_frame = ctk.CTkFrame(message_frame, fg_color=None)
+        input_frame.pack(side="bottom", fill="x", padx=5, pady=5)
+        input_frame.grid_columnconfigure(1, weight=1)
 
-        # Фрейм для сообщений внутри Canvas с отступом справа
-        self.message_frame = ctk.CTkFrame(self.history_canvas, fg_color='#252850')
+        # Загрузка иконок
+        paperclip_icon = ctk.CTkImage(light_image=Image.open("Config/paperclip_icon.png").resize((45, 45)), size=(45, 45))
+        mic_icon = ctk.CTkImage(light_image=Image.open("Config/microphone_icon.png").resize((45, 45)), size=(30, 30))
+        smile_icon = ctk.CTkImage(light_image=Image.open("Config/smile_icon.png").resize((45, 45)), size=(30, 30))
+        save_icon = ctk.CTkImage(light_image=Image.open("Config/save_icon.png").resize((45, 45)), size=(30, 30))
 
-        # Функция для динамической подстройки ширины фрейма
-        def resize_message_frame(event):
-            # Проверяем, что фрейм и окно для сообщений уже созданы
-            canvas_width = event.width - 15  # Добавляем отступ для фрейма, чтобы он не касался скроллбара
-            self.history_canvas.itemconfig(self.message_frame_window, width=canvas_width)
+        # Кнопка для скрепки
+        self.paperclip_button = ctk.CTkButton(input_frame, image=paperclip_icon, command=self.attach_file,
+                                              fg_color="transparent", hover=False, width=60, height=60, text="")
+        self.paperclip_button.grid(row=0, column=0, padx=(0, 5))
 
+        # Поле для ввода сообщений
+        self.message_entry = ctk.CTkTextbox(input_frame, fg_color='#333', text_color='white', font=('Helvetica', 14), height=60)
+        self.message_entry.grid(row=0, column=1, sticky='ew', padx=(5, 5))  # sticky='ew' растягивает элемент
 
-        # Размещаем фрейм в Canvas
-        self.message_frame_window = self.history_canvas.create_window((0, 0), window=self.message_frame, anchor='nw', width=self.history_canvas.winfo_width() + 130)
-        # Привязываем изменение размера канваса к функции изменения фрейма
-        self.history_canvas.after(400, lambda: self.history_canvas.bind("<Configure>", lambda event: resize_message_frame(event)))
+        # Заполнитель текста
+        self.placeholder_text = "Введите сообщение"
+        self.message_entry.insert(tk.END, self.placeholder_text)
+        self.message_entry.configure(text_color='grey')  # Цвет заполнителя
 
-        # Настраиваем скроллинг, чтобы он работал корректно
-        self.message_frame.bind("<Configure>", lambda event: self.history_canvas.configure(scrollregion=self.history_canvas.bbox("all")))
-
-        # Фрейм для ввода сообщений (внизу)
-        input_frame = ctk.CTkFrame(self.chat_window, fg_color=None)
-        input_frame.grid(row=2, column=1, columnspan=2, sticky='ew', padx=5, pady=5)
-
-        # Загрузка иконок с корректировкой их размера до 35x35, используем CTkImage
-        paperclip_icon = ctk.CTkImage(light_image=Image.open("Config/paperclip_icon.png").resize((45, 45)))
-        mic_icon = ctk.CTkImage(light_image=Image.open("Config/microphone_icon.png").resize((45, 45)))
-        smile_icon = ctk.CTkImage(light_image=Image.open("Config/smile_icon.png").resize((45, 45)))
-        save_icon = ctk.CTkImage(light_image=Image.open("Config/save_icon.png").resize((45, 45)))
-
-        # Создание кнопки для скрепки
-        self.paperclip_button = ctk.CTkButton(input_frame, image=paperclip_icon, command=self.attach_file, fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
-        self.paperclip_button.pack(side=ctk.LEFT, padx=(0, 5))
-
-        # Поле для ввода сообщений - поменять на Input вместо Textbox
-        self.message_entry = ctk.CTkTextbox(input_frame, fg_color='#333', text_color='white', font=('Helvetica', 14), height=10, width=60)
-        self.message_entry.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True)
+        self.message_entry.bind('<FocusIn>', self.on_focus_in)
+        self.message_entry.bind('<FocusOut>', self.on_focus_out)
         self.message_entry.bind('<Return>', self.send_message)
         self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, ''))
 
-        # Создание кнопок для микрофона, смайлика и сохранения чата
-        self.mic_button = ctk.CTkButton(input_frame, image=mic_icon, fg_color="transparent", hover_color=None, text="", width=60, height=60, border_width=0)
-        self.mic_button.pack(side=ctk.LEFT, padx=(5, 5))
+        # Кнопки для микрофона, смайлика и сохранения чата
+        self.mic_button = ctk.CTkButton(input_frame, image=mic_icon, fg_color="transparent", hover=False, text="",
+                                        width=30, height=30)
+        self.mic_button.grid(row=0, column=2, padx=(5, 5))
         self.mic_button.bind('<ButtonPress-1>', self.start_recording)
         self.mic_button.bind('<ButtonRelease-1>', self.stop_recording)
 
-        self.smile_button = ctk.CTkButton(input_frame, image=smile_icon, command=self.open_emoji_menu, fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
-        self.smile_button.pack(side=ctk.LEFT, padx=(5, 5))
+        self.smile_button = ctk.CTkButton(input_frame, image=smile_icon, command=self.open_emoji_menu,
+                                          fg_color="transparent", hover=False, width=30, height=30, text="")
+        self.smile_button.grid(row=0, column=3, padx=(5, 5))
 
-        self.save_button = ctk.CTkButton(input_frame, image=save_icon, command=lambda: self.save_chat(server_ip), fg_color="transparent", hover_color=None, width=60, height=60, text="", border_width=0)
-        self.save_button.pack(side=ctk.LEFT, padx=(5, 0))
+        self.save_button = ctk.CTkButton(input_frame, image=save_icon, command=lambda: self.save_chat(server_ip),
+                                         fg_color="transparent", hover=False, width=30, height=30, text="")
+        self.save_button.grid(row=0, column=4, padx=(5, 0))
         self.is_unpressed = False
 
         def on_mouse_press(event):
@@ -308,12 +288,26 @@ class ChatApplication:
         self.message_frame.bind("<B1-Motion>", lambda event: on_mouse_drag(event))
         # Привязываем событие для копирования текста
         self.chat_window.bind("<Control-c>", lambda event: self.copy_selected_messages())
-
         # Настройка пропорций сетки
         self.chat_window.grid_rowconfigure(1, weight=1)
         self.chat_window.grid_columnconfigure(1, weight=1)
         self.chat_window.focus_force()
+        #self.message_entry.focus() Не работает. Должно быть выделение фрейма ввода сообщений при заходе
+
         self.chat_window.protocol("WM_DELETE_WINDOW", self.on_chat_window_close)
+
+
+    def on_focus_in(self, event):
+        # Удаляем заполнител, если он активен
+        if self.message_entry.get("1.0", tk.END).strip() == self.placeholder_text:
+            self.message_entry.delete("1.0", tk.END)
+            self.message_entry.configure(text_color='white')  # Возвращаем цвет текста
+
+    def on_focus_out(self, event):
+        # Восстанавливаем заполнитель, если поле пустое
+        if self.message_entry.get("1.0", tk.END).strip() == '':
+            self.message_entry.insert(tk.END, self.placeholder_text)
+            self.message_entry.configure(text_color='grey')  # Цвет заполнителя
 
     def copy_selected_messages(self):
         selected_texts = []
@@ -366,8 +360,8 @@ class ChatApplication:
             message_widget.pack(fill="none", padx=5, pady=5, anchor="w")
 
         # Прокручиваем вниз, чтобы показывать последнее сообщение
-        self.history_canvas.update_idletasks()
-        self.history_canvas.yview_moveto(1.0)
+        self.message_frame.update_idletasks()
+        self.message_frame._parent_canvas.yview_moveto(1.0)
 
 
     def update_user_list(self, users):
@@ -687,8 +681,8 @@ class ChatApplication:
             file_widget.pack(fill="none", padx=5, pady=5, anchor="w")
 
         # Прокручиваем вниз, чтобы показывать последнее сообщение
-        self.history_canvas.update_idletasks()
-        self.history_canvas.yview_moveto(1.0)
+        self.message_frame.update_idletasks()
+        self.message_frame._parent_canvas.yview_moveto(1.0)
 
     def display_image_in_chat(self, file_path):
         try:
@@ -749,7 +743,7 @@ class ChatApplication:
 
         # Прокручиваем чат вниз после добавления аудиосообщения
         self.message_frame.update_idletasks()  # Обновляем, чтобы размеры всех виджетов обновились
-        self.history_canvas.yview_moveto(1)  # Прокрутка в самый низ
+        self.message_frame._parent_canvas.yview_moveto(1.0)  # Прокрутка в самый низ
 
 
 def start_server_process(ip, name, nickname, password):

@@ -17,6 +17,7 @@ def main():
         nickname = utils.save_nickname_settings()
 
 
+    print("##ORIGIN##")
     # Запуск GUI
     root = tk.Tk()
     app = gui.ChatApplication(root, nickname)

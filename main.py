@@ -16,7 +16,7 @@ def main():
     if nickname == None:
         nickname = utils.save_nickname_settings()
 
-
+    print("###TEST###")
     # Запуск GUI
     root = tk.Tk()
     app = gui.ChatApplication(root, nickname)

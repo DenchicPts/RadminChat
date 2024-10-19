@@ -763,23 +763,14 @@ class MessageWidget(ctk.CTkFrame):
         self.is_selected = False  # Флаг выделения
 
         # Создаем текстовое поле для отображения сообщения
-        self.textbox = ctk.CTkLabel(self, fg_color="#2c2f33", text=f"{sender}: {text}",height=50, font=('Helvetica', 12))
+        self.textbox = ctk.CTkLabel(self, fg_color="#2c2f33", text=f"{sender}: {text}", height=50, font=('Helvetica', 12))
         self.textbox.pack(padx=10, pady=5, anchor="w", fill="both", expand=True)
 
-        # Устанавливаем размер фрейма в зависимости от текста
-
-        # Привязываем событие нажатия клавиш для копирования текста
-        #self.bind("<Control-c>", self.copy_text)
 
     def update_size(self):
         # Устанавливаем размер фрейма в зависимости от текста
         self.update_idletasks()
         self.configure(width=self.textbox.winfo_width(), height=self.textbox.winfo_height())
-
-    def copy_text(self, event):
-        # Копируем текст в буфер обмена
-        self.clipboard_clear()
-        self.clipboard_append(self.textbox.get("1.0", "end-1c"))
 
     def toggle_selection(self):
         # Переключаем выделение и изменяем цвет фона

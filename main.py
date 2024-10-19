@@ -16,7 +16,7 @@ def main():
     if nickname == None:
         nickname = utils.save_nickname_settings()
 
-
+    print("###TEST###")
     print("##ORIGIN##")
     # Запуск GUI
     root = tk.Tk()

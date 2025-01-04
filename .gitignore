@@ -24,3 +24,5 @@ ffplay.exe
 __pycache__/
 
 build/main/
+
+.idea/RadminChat.iml

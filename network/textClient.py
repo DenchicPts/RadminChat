@@ -41,70 +41,91 @@ class Client:
         threading.Thread(target=self.listen_for_messages, daemon=True).start()
 
     def listen_for_messages(self):
-        file_accepted = False
-        is_txt_file = False
         file_thread = None
         while True:
             try:
                 message = self.socket.recv(1024 * 10000)
-                try:
-                    message = message.decode('utf-8')
-                    decoded_message = True
-                except UnicodeDecodeError:
-                    decoded_message = False
+                decoded_message, message_content = self.decode_message(message)
 
-                if message and decoded_message and not self.is_txt_file:
-                    if message.startswith("FILE:"):
-                        parts = message.split(":")
-                        sender_nickname = parts[1]  # Получаем никнейм отправителя
-                        file_name = parts[2]
-                        file_size = int(parts[3])
-                        file_counts = int(parts[4])
-                        received_size = 0
-                        file_accepted = True
-                        file_thread = None
-
-                        if file_name.lower().endswith(".txt") or file_name.lower().endswith(".java"):
-                            is_txt_file = True
-                    else:
-                        self.process_message(message)
-
-
-                elif message and not decoded_message or is_txt_file:
-                    if file_thread:
-                        file_thread.join()
-
-                    if not is_txt_file:
-                        file_thread = threading.Thread(target=utils.save_file_chunk,
-                                                       args=(file_name, message, self.host,), daemon=True)
-                        file_thread.start()
-                    else:
-                        utils.receive_file_txt(message, file_name, self.host)
-
-                    received_size += len(message)
-
-                    if received_size >= file_size and file_accepted:
-                        if file_thread:
-                            file_thread.join()
-
-                        if not is_txt_file:
-                            finalizing_file = threading.Thread(target=utils.finalize_file, args=(file_name, self.host,),
-                                                               daemon=True)
-                            finalizing_file.start()
-                            finalizing_file.join()
-
-                        is_txt_file = False
-                        file_accepted = False
-                        received_size = 0
-
-                        file_path = f"Save\\{self.host}"
-                        if self.file_callback:
-                            self.file_callback(file_name, file_path, sender_nickname)
+                if decoded_message and not self.is_txt_file:
+                    self.process_message(message_content)
+                    if message_content.startswith("FILE:"):
+                        self.process_file_metadata(message_content)
+                elif message:
+                    self.handle_non_decoded_message(message, file_thread)
                 else:
                     break
+
             except Exception as e:
                 print(f"Error receiving message: {e}")
                 break
+
+    def decode_message(self, message):
+        try:
+            return True, message.decode('utf-8')
+        except UnicodeDecodeError:
+            return False, message
+
+    def process_file_metadata(self, message):
+        parts = message.split(":")
+        self.sender_nickname = parts[1]
+        self.file_name = parts[2]
+        self.file_size = int(parts[3])
+        self.file_counts = int(parts[4])
+        self.received_size = 0
+        self.file_accepted = True
+
+        if self.file_name.lower().endswith(".txt") or self.file_name.lower().endswith(".java"):
+            self.is_txt_file = True
+
+    def handle_non_decoded_message(self, message, file_thread):
+        if file_thread:
+            file_thread.join()
+
+        if self.is_txt_file:
+            self.process_txt_file(message)
+        else:
+            file_thread = self.save_file_chunk(message)
+
+        self.received_size += len(message)
+        if self.received_size >= self.file_size and self.file_accepted:
+            self.finalize_file_transfer(file_thread)
+
+    def save_file_chunk(self, message):
+        thread = threading.Thread(
+            target=utils.save_file_chunk,
+            args=(self.file_name, message, self.host),
+            daemon=True
+        )
+        thread.start()
+        return thread
+
+    def process_txt_file(self, message):
+        utils.receive_file_txt(message, self.file_name, self.host)
+
+    def finalize_file_transfer(self, file_thread):
+        if file_thread:
+            file_thread.join()
+
+        if not self.is_txt_file:
+            finalizing_thread = threading.Thread(
+                target=utils.finalize_file,
+                args=(self.file_name, self.host),
+                daemon=True
+            )
+            finalizing_thread.start()
+            finalizing_thread.join()
+
+        self.reset_file_transfer_state()
+
+    def reset_file_transfer_state(self):
+        self.is_txt_file = False
+        self.file_accepted = False
+        self.received_size = 0
+
+        file_path = f"Save\\{self.host}"
+        if self.file_callback:
+            self.file_callback(self.file_name, file_path, self.sender_nickname)
 
     def send_message(self, message):
         if self.socket:

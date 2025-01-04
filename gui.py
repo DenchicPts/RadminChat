@@ -1,20 +1,15 @@
-import subprocess
-import time
+import re, subprocess, time, webbrowser, pystray, threading, utils, os, voice
 import tkinter as tk
 from tkinter import messagebox, filedialog
-import pystray
 from pystray import MenuItem as item
-import threading
-import utils
-import client
-import os
+from network import textClient, textServer
 from PIL import Image, ImageTk
 import soundfile as sf
 from multiprocessing import Process
 import customtkinter as ctk
-import voice
 from utils import get_ip_list, threaded
-
+import allbinds as abind
+import tkinter.font as tkFont
 PORT = 36500
 
 class ChatApplication:
@@ -153,9 +148,9 @@ class ChatApplication:
             # Подключаемся как клиент к только что созданной комнате
             self.root.withdraw()
             if not self.server_selected_ip == "0.0.0.0":
-                self.client = client.Client(self.server_selected_ip, 36500, self.nickname, self.server_room_name, self.server_password)
+                self.client = textClient.Client(self.server_selected_ip, 36500, self.nickname, self.server_room_name, self.server_password)
             else:
-                self.client = client.Client("localhost", 36500, self.nickname, self.server_room_name, self.server_password)
+                self.client = textClient.Client("localhost", 36500, self.nickname, self.server_room_name, self.server_password)
             self.is_hosted = True
             self.client.connect()
             self.create_chat_window(self.server_room_name, self.server_selected_ip)  # Передаем IP адрес для заголовка окна
@@ -166,15 +161,15 @@ class ChatApplication:
 
     def create_chat_window(self, room_name, server_ip):
         self.chat_window = ctk.CTkToplevel()
-       # self.chat_window.withdraw()
-        #self.chat_window.after(50, self.chat_window.deiconify())
+        #   self.chat_window.withdraw()
+        #   self.chat_window.after(50, self.chat_window.deiconify())
         self.chat_window.title(f"{room_name} : {server_ip}")
         self.chat_window.geometry("800x600")
         self.chat_window.minsize(500, 350)
         self.chat_window.after(300, lambda: self.chat_window.iconbitmap(self.application_icon))
         # Фрейм для списка пользователей справа
         user_list_frame = ctk.CTkFrame(self.chat_window, fg_color='#252850', width=150)
-        user_list_frame.grid(row=0, column=2, rowspan=2, sticky='ns', padx=5, pady=5)
+        user_list_frame.grid(row=0, column=2, rowspan=2, sticky='ns', padx=0, pady=0)
 
         # Заголовок для списка пользователей
         self.user_list_label = ctk.CTkLabel(user_list_frame, text="Список пользователей", text_color='white')
@@ -182,23 +177,23 @@ class ChatApplication:
 
         # Прокручиваемый Canvas для списка пользователей
         self.user_frame = ctk.CTkScrollableFrame(user_list_frame, fg_color='#252850', width=200)
-        self.user_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        self.user_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
 
-        # Фрейм слева (синий)
+        # Фрейм слева
         left_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D', width=40)
-        left_frame.grid(row=0, column=0, rowspan=2, sticky='ns', padx=5, pady=5)
+        left_frame.grid(row=0, column=0, rowspan=2, sticky='ns', padx=0, pady=0)
 
-        # Фрейм для верхней панели с кнопками (красный)
+        # Фрейм для верхней панели с кнопками
         top_buttons_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D', height=50)
-        top_buttons_frame.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        top_buttons_frame.grid(row=0, column=1, sticky='ew', padx=0, pady=0)
 
         self.exit_button = ctk.CTkButton(top_buttons_frame, text="Выход", command=self.on_chat_window_close,
                                          fg_color=None, hover_color=None, text_color="white")
-        self.exit_button.grid(row=0, column=0, padx=5)
+        self.exit_button.grid(row=0, column=0, padx=0)
 
-        # Фрейм для сообщений (красный)
+        # Фрейм для сообщений
         message_frame = ctk.CTkFrame(self.chat_window, fg_color='#1E213D')
-        message_frame.grid(row=1, column=1, sticky='nsew', padx=5, pady=5)
+        message_frame.grid(row=1, column=1, sticky='nsew', padx=0, pady=0)
 
         self.message_frame = ctk.CTkScrollableFrame(message_frame, fg_color='#252850')
         self.message_frame.pack(fill="both", expand=True)
@@ -217,36 +212,29 @@ class ChatApplication:
         # Кнопка для скрепки
         self.paperclip_button = ctk.CTkButton(input_frame, image=paperclip_icon, command=self.attach_file,
                                               fg_color="transparent", hover=False, width=60, height=60, text="")
-        self.paperclip_button.grid(row=0, column=0, padx=(0, 5))
+        self.paperclip_button.grid(row=0, column=0, padx=(0, 0))
 
         # Поле для ввода сообщений
         self.message_entry = ctk.CTkTextbox(input_frame, fg_color='#333', text_color='white', font=('Helvetica', 14), height=60)
-        self.message_entry.grid(row=0, column=1, sticky='ew', padx=(5, 5))  # sticky='ew' растягивает элемент
+        self.message_entry.grid(row=0, column=1, sticky='ew', padx=(0, 0))  # sticky='ew' растягивает элемент
 
         # Заполнитель текста
         self.placeholder_text = "Введите сообщение"
         self.message_entry.insert(tk.END, self.placeholder_text)
         self.message_entry.configure(text_color='grey')  # Цвет заполнителя
 
-        self.message_entry.bind('<FocusIn>', self.on_focus_in)
-        self.message_entry.bind('<FocusOut>', self.on_focus_out)
-        self.message_entry.bind('<Return>', self.send_message)
-        self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, ''))
-
         # Кнопки для микрофона, смайлика и сохранения чата
         self.mic_button = ctk.CTkButton(input_frame, image=mic_icon, fg_color="transparent", hover=False, text="",
                                         width=30, height=30)
-        self.mic_button.grid(row=0, column=2, padx=(5, 5))
-        self.mic_button.bind('<ButtonPress-1>', self.start_recording)
-        self.mic_button.bind('<ButtonRelease-1>', self.stop_recording)
+        self.mic_button.grid(row=0, column=2, padx=(0, 0))
 
         self.smile_button = ctk.CTkButton(input_frame, image=smile_icon, command=self.open_emoji_menu,
                                           fg_color="transparent", hover=False, width=30, height=30, text="")
-        self.smile_button.grid(row=0, column=3, padx=(5, 5))
+        self.smile_button.grid(row=0, column=3, padx=(0, 0))
 
         self.save_button = ctk.CTkButton(input_frame, image=save_icon, command=lambda: self.save_chat(server_ip),
                                          fg_color="transparent", hover=False, width=30, height=30, text="")
-        self.save_button.grid(row=0, column=4, padx=(5, 0))
+        self.save_button.grid(row=0, column=4, padx=(0, 0))
         self.is_unpressed = False
 
         def on_mouse_press(event):
@@ -284,18 +272,46 @@ class ChatApplication:
 
             self.last_mouse_y = mouse_y  # Обновляем последнюю позицию Y
 
-        self.message_frame.bind("<Button-1>", lambda event: on_mouse_press(event))
-        self.message_frame.bind("<B1-Motion>", lambda event: on_mouse_drag(event))
-        # Привязываем событие для копирования текста
-        self.chat_window.bind("<Control-c>", lambda event: self.copy_selected_messages())
+        def chat_allbinds():
+            self.message_entry.bind('<FocusIn>', self.on_focus_in)
+            self.message_entry.bind('<FocusOut>', self.on_focus_out)
+            self.message_entry.bind('<Return>', self.send_message)
+            self.message_entry.bind('<Shift-Return>', lambda e: self.message_entry.insert(tk.END, ''))
+            self.mic_button.bind('<ButtonPress-1>', self.start_recording)
+            self.mic_button.bind('<ButtonRelease-1>', self.stop_recording)
+            self.chat_window.bind("<Control-c>", lambda event: self.copy_selected_messages())
+            self.message_frame.bind("<Button-1>", lambda event: on_mouse_press(event))
+            self.message_frame.bind("<B1-Motion>", lambda event: on_mouse_drag(event))
+            self.message_entry.bind('<Control-Left>', abind.move_cursor_left)
+            self.message_entry.bind('<Control-Right>', abind.move_cursor_right)
+            # Бинды для выделения текста по словам
+            self.message_entry.bind('<Control-Shift-Left>', abind.select_word_left)
+            self.message_entry.bind('<Control-Shift-Right>', abind.select_word_right)
+            self.message_entry.bind("<Control-v>", self.paste_link)
+
+        #Привязываем события
+        chat_allbinds()
         # Настройка пропорций сетки
         self.chat_window.grid_rowconfigure(1, weight=1)
         self.chat_window.grid_columnconfigure(1, weight=1)
         self.chat_window.focus_force()
-        #self.message_entry.focus() Не работает. Должно быть выделение фрейма ввода сообщений при заходе
+        #   self.message_entry.focus() Не работает. Должно быть выделение фрейма ввода сообщений при заходе
 
         self.chat_window.protocol("WM_DELETE_WINDOW", self.on_chat_window_close)
 
+    def paste_link(self, event):
+        """ Обрабатывает вставку ссылки с заменой на формат [text](url). """
+        clipboard_text = self.root.clipboard_get()
+
+        if re.match(r'^(https?|ftp)://|^www\.', clipboard_text):  # Проверка, что это ссылка
+            selected_text = self.message_entry.get("sel.first", "sel.last")
+
+            if selected_text:
+                self.message_entry.delete("sel.first", "sel.last")
+                formatted_link = f"[{selected_text}]({clipboard_text})"
+                self.message_entry.insert("insert", formatted_link)
+
+            return "break"  # Остановка стандартной вставки текста
 
     def on_focus_in(self, event):
         # Удаляем заполнител, если он активен
@@ -351,12 +367,13 @@ class ChatApplication:
         return 'break'
 
     def add_message(self, text, sender=""):
-        message_widget = MessageWidget(self.message_frame, text, sender)
 
         # Сообщения пользователя будут справа, остальные — слева
         if sender == "You":
+            message_widget = MessageWidget(self.message_frame, text)
             message_widget.pack(fill="none", padx=5, pady=5, anchor="e")
         else:
+            message_widget = MessageWidget(self.message_frame, text, sender)
             message_widget.pack(fill="none", padx=5, pady=5, anchor="w")
 
         # Прокручиваем вниз, чтобы показывать последнее сообщение
@@ -454,9 +471,9 @@ class ChatApplication:
         self.server_process.start()
         # Подключаемся как клиент к только что созданной комнате
         if not self.server_selected_ip == "0.0.0.0":
-            self.client = client.Client(self.server_selected_ip, 36500, self.nickname, self.server_room_name, self.server_password)
+            self.client = textClient.Client(self.server_selected_ip, 36500, self.nickname, self.server_room_name, self.server_password)
         else:
-            self.client = client.Client("localhost", 36500, self.nickname, self.server_room_name, self.server_password)
+            self.client = textClient.Client("localhost", 36500, self.nickname, self.server_room_name, self.server_password)
         self.is_hosted = True
         self.client.connect()
         self.create_chat_window(self.server_room_name, self.server_selected_ip)  # Передаем IP адрес для заголовка окна
@@ -592,7 +609,7 @@ class ChatApplication:
         def attempt_connection():
             try:
                 # Создаем и запускаем клиента
-                self.client = client.Client(server_ip, port, nickname, "", password)
+                self.client = textClient.Client(server_ip, port, nickname, "", password)
 
                 # Пытаемся подключиться с тайм-аутом
                 if self.client.connect_with_timeout():
@@ -748,8 +765,7 @@ class ChatApplication:
 
 def start_server_process(ip, name, nickname, password):
     try:
-        import server
-        server_process = server.Server(ip, 36500, name, nickname, password)
+        server_process = textServer.Server(ip, 36500, name, nickname, password)
         server_process.start()
     except Exception as e:
         print("Server shutted")
@@ -757,15 +773,41 @@ def start_server_process(ip, name, nickname, password):
 
 
 class MessageWidget(ctk.CTkFrame):
-    def __init__(self, parent, text, sender="You"):
+    def __init__(self, parent, text, sender=""):
         super().__init__(parent, fg_color="#2c2f33", border_color="#2c2f33", border_width=1)
         self.text = text
         self.is_selected = False  # Флаг выделения
 
         # Создаем текстовое поле для отображения сообщения
-        self.textbox = ctk.CTkLabel(self, fg_color="#2c2f33", text=f"{sender}: {text}", height=50, font=('Helvetica', 12))
+        self.textbox = ctk.CTkTextbox(self, fg_color="#2c2f33", text_color="white", font=('Helvetica', 12), height=2, wrap="word")
         self.textbox.pack(padx=10, pady=5, anchor="w", fill="both", expand=True)
 
+        # Вставляем текст и выделяем ссылки
+        self.process_links(f"{sender} {text}")
+        self.adjust_textbox_size() # Требуется исправить так как текст задаёт неправильную ширину, нужно для того чтобы избавится от скрола в боксе
+        self.textbox.configure(state="disabled")  # Запрещаем редактирование текста пользователем
+
+    def process_links(self, text):
+        """Обрабатываем текст, выделяя ссылки синим цветом и добавляя события."""
+        self.textbox.insert("1.0", text)
+
+        # Найдем все ссылки в формате [текст](ссылка)
+        links = re.finditer(r'\[(.*?)\]\((.*?)\)', text)
+        for match in links:
+            link_text, link_url = match.groups()
+            start_idx = f"1.0 + {match.start()} chars"
+            end_idx = f"1.0 + {match.start() + len(link_text)} chars"
+
+            # Удаляем формат [текст](ссылка) и оставляем только текст
+            self.textbox.delete(f"1.0 + {match.start()} chars", f"1.0 + {match.end()} chars")
+            self.textbox.insert(f"1.0 + {match.start()} chars", link_text)
+
+            # Настраиваем тег для ссылки
+            self.textbox.tag_add(link_text, start_idx, end_idx)
+            self.textbox.tag_config(link_text, foreground="deepskyblue1", underline=False)
+            self.textbox.tag_bind(link_text, "<Enter>", lambda e, tag=link_text: self.textbox.tag_config(tag, underline=True))
+            self.textbox.tag_bind(link_text, "<Leave>", lambda e, tag=link_text: self.textbox.tag_config(tag, underline=False))
+            self.textbox.tag_bind(link_text, "<Button-1>", lambda e, url=link_url: webbrowser.open(url))
 
     def update_size(self):
         # Устанавливаем размер фрейма в зависимости от текста
@@ -782,6 +824,26 @@ class MessageWidget(ctk.CTkFrame):
             self.configure(fg_color="#2c2f33")  # Исходный цвет
             self.textbox.configure(fg_color="#2c2f33")
 
+    def adjust_textbox_size(self):
+        """Подстраиваем размер текстового виджета под содержимое."""
+        # Получаем шрифт, используемый в текстовом виджете
+        font = tkFont.Font(family='Helvetica', size=12)
+        text = self.text  # Используем текст сообщения
+        lines = text.split("\n")
+        max_line_width = max(font.measure(line) for line in lines)
+        text_height = font.metrics('linespace')  # Высота строки
+        num_lines = len(lines)
+        max_width = 300  # Максимальная ширина виджета
+        padding = 30  # Отступы
+
+        # Вычисляем итоговые размеры с учетом отступов
+        new_width = min(max_line_width + padding, max_width)  # Ограничиваем ширину
+        new_height = (text_height * num_lines) + padding - (padding // 2)  # Высота виджета
+
+        # Устанавливаем ширину и высоту текстового виджета
+        self.textbox.configure(width=new_width, height=new_height)
+
+
 
 class UserButtonWidget(ctk.CTkButton):
     def __init__(self, master=None, username="", *args, **kwargs):
@@ -794,10 +856,12 @@ class UserButtonWidget(ctk.CTkButton):
 
 class FileWidget(ctk.CTkFrame):
     def __init__(self, parent, file_name, file_path, sender="You", *args, **kwargs):
-        super().__init__(parent, fg_color="#2c2f33", border_color="black", border_width=1, *args, **kwargs)
+        super().__init__(parent, fg_color="#2c2f33", border_color="#2c2f33", border_width=1, *args, **kwargs)
 
         self.file_name = file_name
         self.file_path = file_path
+        self.is_selected = False
+        self.text = f"{sender}: {file_name}"
 
         # Кнопка с иконкой файла
         #self.file_button = ctk.CTkButton(self, width=35, height=35, image=self.get_file_icon(), text="", command=self.open_file_folder, fg_color=None)
@@ -826,3 +890,13 @@ class FileWidget(ctk.CTkFrame):
                 messagebox.showerror("Ошибка", "Операционная система не поддерживается")
         else:
             messagebox.showerror("Ошибка", f"Папка не найдена: {folder_path}")
+
+    def toggle_selection(self):
+        # Переключаем выделение и изменяем цвет фона
+        self.is_selected = not self.is_selected
+        if self.is_selected:
+            self.configure(fg_color="#2c778f")  # Цвет для выделенного сообщения
+            self.label.configure(fg_color="#2c778f")
+        else:
+            self.configure(fg_color="#2c2f33")  # Исходный цвет
+            self.label.configure(fg_color="#2c2f33")

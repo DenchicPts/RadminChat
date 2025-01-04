@@ -25,6 +25,9 @@ class Server:
             "#CHANGEROOMNAME#": self.handle_room_name,
             "#MESSAGE#": self.handle_message,
         }
+        # Для работы с файлами
+        self.file_paths = None
+        self.is_txt_file = False
 
 
     def start(self):
@@ -57,124 +60,26 @@ class Server:
 
     def handle_client(self, client_socket):
         try:
-            # Получаем первое сообщение от клиента (никнейм, название комнаты и пароль)
-            welcome_message = client_socket.recv(BUFFER_SIZE).decode('utf-8')
-            # print(welcome_message)
-            if welcome_message:
-                parts = welcome_message.split('*')
-                if len(parts) < 2:
-                    print(f"SERVER Invalid welcome message from {self.addresses[client_socket]}")
-                    client_socket.close()
-                    return
+            # Handle welcome message
+            if not self.process_welcome_message(client_socket):
+                return
 
-                nickname = parts[0]
-                client_room_name = parts[1]
-                password = parts[2] if len(parts) > 2 else ""
-
-                # Проверяем пароль
-                if self.room_password and self.room_password != password:
-                    print(f"SERVER Invalid password from {self.addresses[client_socket]}")
-                    client_socket.send("Invalid password".encode('utf-8'))
-                    client_socket.close()
-                    return
-                else:
-                    print(f"SERVER Success connection from {self.addresses[client_socket]}")
-                    client_socket.send("#MESSAGE#Success connection".encode('utf-8'))
-
-
-                # Проверяем, не хост ли это (по IP)
-                if self.addresses[client_socket] in {self.host, "127.0.0.1"}:
-                    self.room_name = client_room_name
-
-                print(f"SERVER Room name: {self.room_name}, Password: {password}")
-
-                # Добавляем клиента в список
-                self.clients[client_socket] = nickname
-                # print(f"SERVER Welcome message from {self.addresses[client_socket]}: {welcome_message}")
-
-                # Отправляем клиенту название комнаты
-                client_socket.send(f"#ROOMNAME#{self.room_name}".encode('utf-8'))
-                utils.save_room_settings(self.room_name, password)
-
-                client_socket.send(f"#MESSAGE#Welcome to the chat, {nickname}!".encode('utf-8'))
-
-                self.update_user_list()
-
-            # Для работы с файлами
-            file_accepted = False
-            file_paths = None
-            is_txt_file = False
-            #
             while not self.stop_event.is_set():
-                print(f"Столько потоков задействовано :{threading.active_count()}")
+                print(f"Active threads: {threading.active_count()}")
                 message = client_socket.recv(BUFFER_SIZE * 10000)
 
-                try:
-                    message = message.decode('utf-8')
-                    decoded_message = True
-                except UnicodeDecodeError:
-                    decoded_message = False
+                decoded_message, message_content = self.decode_message(message)
 
-                if message and decoded_message and not is_txt_file:
-                    print(f"SERVER Received message from {self.addresses[client_socket]}: {message}")
-                    self.process_message(message, client_socket)
+                if decoded_message and not self.is_txt_file:
+                    print(f"SERVER Received message from {self.addresses[client_socket]}: {message_content}")
+                    self.process_message(message_content, client_socket)
 
-                    if message.startswith("FILE:"):
-                        parts = message.split(":")
-                        sender_nickname = parts[1]
-                        file_name = parts[2]
-                        file_size = int(parts[3])
-                        file_counts = int(parts[4])
-                        file_accepted = True
-                        file_thread = None
-                        received_size = 0
+                    if message_content.startswith("FILE:"):
+                        self.handle_file_message(message_content, client_socket)
 
-                        if file_name.lower().endswith(".txt") or file_name.lower().endswith(".java"):
-                            is_txt_file = True
-
-                        if file_paths:
-                            file_paths.append(file_name)
-                        else:
-                            file_paths = [file_name]
-
-                        # Проверка, существует ли файл на сервере
-                        if utils.file_exists(file_name, file_size):
-                            # Отправляем сообщение клиенту, что файл уже существует
-                            client_socket.send(f"#FILE_EXISTS#{file_name}".encode('utf-8'))
-                            print(f" FILE COUNTS {file_counts} FILE PATHS {file_paths}")
-                            if file_counts == len(file_paths):
-                                threading.Thread(target=self.send_files, args=(client_socket, file_paths, sender_nickname), daemon=True).start()
-                                file_paths = None
-
-
-                elif message and not decoded_message or is_txt_file:
-                    if file_thread:
-                        file_thread.join()
-
-                    if not is_txt_file:
-                        file_thread = threading.Thread(target=utils.save_file_chunk, args=(file_name, message,), daemon=True)
-                        file_thread.start()
-                    else:
-                        utils.receive_file_txt(message, file_name)
-
-                    received_size += len(message)
-                    if received_size >= file_size and file_accepted:
-                        if file_thread:
-                            file_thread.join()
-
-                        if not is_txt_file:
-                            finalizing_file = threading.Thread(target=utils.finalize_file, args=(file_name,), daemon=True)
-                            finalizing_file.start()
-                            finalizing_file.join()
-
-                        if file_counts == len(file_paths):
-                            threading.Thread(target=self.send_files, args=(client_socket, file_paths, sender_nickname), daemon=True).start()
-                            file_paths = None
-
-
-                        file_accepted = False
-                        is_txt_file = False
-                        received_size = 0
+                elif message and not decoded_message or self.is_txt_file:
+                    time.sleep(0.1)
+                    self.handle_file_download(message, client_socket)
 
                 elif message:
                     del message
@@ -187,6 +92,56 @@ class Server:
         finally:
             print(f"###Client {self.addresses[client_socket]} disconnected")
             self.remove_client(client_socket)
+
+    def process_welcome_message(self, client_socket):
+        try:
+            welcome_message = client_socket.recv(BUFFER_SIZE).decode('utf-8')
+            if not welcome_message:
+                return False
+
+            parts = welcome_message.split('*')
+            if len(parts) < 2:
+                print(f"SERVER Invalid welcome message from {self.addresses[client_socket]}")
+                client_socket.close()
+                return False
+
+            nickname = parts[0]
+            client_room_name = parts[1]
+            password = parts[2] if len(parts) > 2 else ""
+
+            if self.room_password and self.room_password != password:
+                print(f"SERVER Invalid password from {self.addresses[client_socket]}")
+                client_socket.send("Invalid password".encode('utf-8'))
+                client_socket.close()
+                return False
+
+            print(f"SERVER Success connection from {self.addresses[client_socket]}")
+            client_socket.send("#MESSAGE#Success connection".encode('utf-8'))
+
+            if self.addresses[client_socket] in {self.host, "127.0.0.1"}:
+                self.room_name = client_room_name
+
+            print(f"SERVER Room name: {self.room_name}, Password: {password}")
+
+            self.clients[client_socket] = nickname
+
+            client_socket.send(f"#ROOMNAME#{self.room_name}".encode('utf-8'))
+            utils.save_room_settings(self.room_name, password)
+
+            client_socket.send(f"#MESSAGE#Welcome to the chat, {nickname}!".encode('utf-8'))
+            self.update_user_list()
+            return True
+        except Exception as e:
+            print(f"Error processing welcome message: {e}")
+            client_socket.close()
+            return False
+
+
+    def decode_message(self, message):
+        try:
+            return True, message.decode('utf-8')
+        except UnicodeDecodeError:
+            return False, message
 
     def remove_client(self, client_socket):
         client_socket.close()
@@ -271,3 +226,60 @@ class Server:
                 utils.save_room_settings(self.room_name, self.room_password)
                 self.broadcast(f"#ROOMNAME#{self.room_name}")
                 self.broadcast(f"Room name changed to: {self.room_name}")
+
+    def handle_file_message(self, message, client_socket):
+        parts = message.split(":")
+        self.sender_nickname = parts[1]
+        self.file_name = parts[2]
+        self.file_size = int(parts[3])
+        self.file_counts = int(parts[4])
+        self.file_accepted = True
+        self.file_thread = None
+        self.received_size = 0
+
+        if self.file_name.lower().endswith(".txt") or self.file_name.lower().endswith(".java"):
+            self.is_txt_file = True
+
+        if self.file_paths:
+            self.file_paths.append(self.file_name)
+        else:
+            self.file_paths = [self.file_name]
+
+        # Проверка, существует ли файл на сервере
+        if utils.file_exists(self.file_name, self.file_size):
+            # Отправляем сообщение клиенту, что файл уже существует
+            client_socket.send(f"#FILE_EXISTS#{self.file_name}".encode('utf-8'))
+            print(f" FILE COUNTS {self.file_counts} FILE PATHS {self.file_paths}")
+            if self.file_counts == len(self.file_paths):
+                threading.Thread(target=self.send_files, args=(client_socket, self.file_paths, self.sender_nickname),
+                                daemon=True).start()
+                self.file_paths = None
+
+    def handle_file_download(self, message, client_socket):
+        if self.file_thread:
+            self.file_thread.join()
+
+        if not self.is_txt_file:
+            self.file_thread = threading.Thread(target=utils.save_file_chunk, args=(self.file_name, message,), daemon=True)
+            self.file_thread.start()
+        else:
+            utils.receive_file_txt(message, self.file_name)
+
+        self.received_size += len(message)
+        if self.received_size >= self.file_size and self.file_accepted:
+            if self.file_thread:
+                self.file_thread.join()
+
+            if not self.is_txt_file:
+                finalizing_file = threading.Thread(target=utils.finalize_file, args=(self.file_name,), daemon=True)
+                finalizing_file.start()
+                finalizing_file.join()
+
+            if self.file_counts == len(self.file_paths):
+                threading.Thread(target=self.send_files, args=(client_socket, self.file_paths, self.sender_nickname),
+                                 daemon=True).start()
+                self.file_paths = None
+
+            self.file_accepted = False
+            self.is_txt_file = False
+            self.received_size = 0

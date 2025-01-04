@@ -92,7 +92,7 @@ def get_available_ip_addresses():
     return ip_addresses
 
 def save_room_settings(room_name, password, filename="settings.json"):
-    # Проверяем, существует ли файл
+    # Проверяем, существует ли файл]]
     if not os.path.exists(filename):
         # Если файл не существует, создаём новый с пустым содержимым
         data = {}
